@@ -62,5 +62,6 @@ public interface IPipelineIntents
     /// Atomically read and clear all pending intents. Called once per cycle tick.
     /// </summary>
     void RequestPassiveGuidance(bool requested) { }
+    void RequestToolGpsSimulation(bool enabled) { }
     PipelineIntentBatch Drain();
 }

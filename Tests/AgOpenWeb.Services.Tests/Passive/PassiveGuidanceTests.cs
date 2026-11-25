@@ -187,4 +187,33 @@ public class PassiveGuidanceTests
         Assert.That(receiver.Latest,Is.Not.Null);Assert.That(double.IsNaN(receiver.Latest!.ImuHeading),Is.True);
         receiver.Dispose();Assert.That(receiver.Latest,Is.Null);
     }
+    [TestCase(0)] [TestCase(45)] [TestCase(180)] [TestCase(270)]
+    public void SimulatedAntennaOffsetsRecoverTheIndependentWorkingBar(double degrees)
+    {
+        var input=Input(0);
+        var settings=input.Passive!.Settings;
+        settings.AntennaOffset=1.2;settings.AntennaToWorkingPoint=3.7;
+        settings.HeadingOffset=13;settings.RollZero=2;settings.InvertRoll=true;
+        double heading=degrees*Math.PI/180;
+        var antenna=ToolGpsSimulator.AntennaPosition(0.6,2,heading,settings);
+        var fix=new ImplementGpsFix(Epoch,0,0,4,2,degrees-settings.HeadingOffset,double.NaN,double.NaN,Epoch,-settings.RollZero);
+        input.Passive=new() {Settings=settings,Now=Epoch,Requested=true,HasLocalPlane=true,ToolEast=antenna.East,ToolNorth=antenna.North,Fix=fix,Width=6,Context="sim"};
+        var result=new TrackGuidanceService().CalculateGuidance(input);
+        Assert.Multiple(()=>{
+            Assert.That(result.Passive.ToolEast,Is.EqualTo(0.6).Within(1e-9));
+            Assert.That(result.Passive.ToolNorth,Is.EqualTo(2).Within(1e-9));
+        });
+    }
+    [Test]
+    public void ToolGpsIntentIsIndependentFromPassiveRequestAndLastWins()
+    {
+        var intents=new PipelineIntents();
+        intents.RequestPassiveGuidance(true);
+        intents.RequestToolGpsSimulation(true);intents.RequestToolGpsSimulation(false);
+        var batch=intents.Drain();
+        Assert.That(batch.PassiveRequested,Is.True);
+        Assert.That(batch.ToolGpsSimulation,Is.False);
+        Assert.That(intents.Drain().ToolGpsSimulation,Is.Null);
+    }
+
 }

@@ -39,6 +39,14 @@ A fresh implement fix (up to 1.5 seconds) is required. Low speed (<2 km/h), miss
 
 Provide appropriate RTK corrections to both receivers. The receiver addition does not change AgOpenWeb's NTRIP routing: if the tractor currently receives unicast corrections, arrange implement corrections separately or use the existing broadcast option when appropriate for the network. The firmware has not been changed in this port.
 
+## Built-in simulator
+
+Enable the simulator, open or create a field, and select an AB line or curve. On the bottom simulator bar, turn **Tool GPS** on. This supplies an independent virtual implement antenna from the existing trailing-tool model; no UDP tool receiver is needed. Set the tool type and hitch/drawbar dimensions in the tool profile before testing.
+
+Enable passive mode in Tool Config → Passive, drive above 2 km/h, engage tractor autosteer, then turn **Passive on**. The tractor must first acquire the line within 10 cm and 1.5°. The passive panel identifies the source as **Simulator**. Sections do not affect engagement. Tool GPS does not arm steering by itself.
+
+Turn Tool GPS off to return to the real implement receiver. Simulated tool input defaults off at startup and switches off when tractor input leaves the built-in simulator. Changing input sources resets passive corrections. This geometric simulation exercises guidance and UI integration; it does not simulate soil forces or side-draft.
+
 ## Architecture and validation
 
 All runtime code is under `Shared/`. UDP reception parses into an independent immutable implement measurement. The cycle worker converts it into the field's local coordinate system, applies drift consistently, and runs passive control inside the shared track guidance service. A pipeline intent owns the separate armed request; snapshots carry telemetry to the UI mirror and binary Tick/Config extensions carry it to the browser. `passive.*` commands require fresh control authority; `config.set` cannot bypass that gate. Settings are validated at the profile boundary.
@@ -56,3 +64,5 @@ python3 Tools/i18n-extract.py --check
 This is an experimental port for simulator/bench validation. Host compilation and automated tests do not establish field performance, and iOS/Android native packaging requires their platform toolchains.
 
 Validated for this port: **167 model tests, 1,569 service tests and 319 ViewModel tests passed** (2 service tests skipped). The service count includes 20 new passive tests. The Desktop host builds successfully. JavaScript syntax and translation extraction checks pass. A Chromium session against the running host verified config round-trip, arm/disarm, observer command rejection (including the generic-config bypass), authority-loss disarm, listener lifecycle on UDP 19999, and a compact panel that fits the tested 1280×800 viewport. No browser script errors occurred. These checks do not replace a coupled tractor/implement field test or native mobile packaging.
+
+Simulator-toggle validation: fixed and trailing implement engagement was tested against the running desktop backend in Chromium. Turning Tool GPS off returns to the real receiver and disengages without a valid real fix. Automated suites pass 2,060 tests (two skipped), including antenna geometry and independent simulator intents. Windows native launch remains untested on this Linux build host.

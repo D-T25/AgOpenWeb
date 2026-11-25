@@ -71,6 +71,8 @@ public sealed class PipelineIntents : IPipelineIntents
     }
 
     private int _passiveRequest;
+    private int _toolGpsSimulation;
+    public void RequestToolGpsSimulation(bool enabled) => Interlocked.Exchange(ref _toolGpsSimulation,enabled?1:2);
     public void RequestPassiveGuidance(bool requested) => Interlocked.Exchange(ref _passiveRequest,requested?1:2);
     public PipelineIntentBatch Drain()
     {
@@ -96,6 +98,7 @@ public sealed class PipelineIntents : IPipelineIntents
 
         return new PipelineIntentBatch
         {
+            ToolGpsSimulation = Interlocked.Exchange(ref _toolGpsSimulation,0) switch {1=>true,2=>false,_=>(bool?)null},
             PassiveRequested = Interlocked.Exchange(ref _passiveRequest,0) switch {1=>true,2=>false,_=>(bool?)null},
             ManualYouTurn = manualYouTurn,
             ClearYouTurn = clear == 1,

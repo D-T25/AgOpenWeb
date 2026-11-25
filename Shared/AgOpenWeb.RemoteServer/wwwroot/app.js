@@ -6252,8 +6252,14 @@ function skFrame() {
 skFrame();
 
 // Backend-owned passive steering. Neither section state nor browser geometry enters this flow.
+document.getElementById('sim-tool-gps').addEventListener('pointerdown', e => {
+  e.stopPropagation(); transport.send('passive.simulator|' + (tick && tick.passive && tick.passive.simulatedGps ? '0' : '1'));
+});
 function renderPassive(t) {
   const p = t && t.passive || {}, enabled = config && config.passive && config.passive.enabled;
+  const toolGps = document.getElementById('sim-tool-gps');
+  toolGps.classList.toggle('on', !!p.simulatedGps);
+  toolGps.disabled = !iHoldControl || !(statusBar && statusBar.simEnabled);
   for (const id of ['passive-arm', 'rn-passive']) {
     const b = document.getElementById(id); b.disabled = !iHoldControl || !enabled;
     b.classList.toggle('active', !!p.requested);
@@ -6263,7 +6269,7 @@ function renderPassive(t) {
   document.getElementById('passive-telemetry').textContent =
     tr('Tool error {error} cm · Tractor offset {offset} cm · {heading} · {reason}', {
       error: ((p.toolError || 0) * 100).toFixed(1), offset: ((p.offset || 0) * 100).toFixed(1),
-      heading: p.headingSource || tr('Unavailable'), reason: p.reason || tr('Waiting for implement GPS') });
+      heading: p.simulatedGps ? tr('Simulator') : p.headingSource || tr('Unavailable'), reason: p.reason || tr('Waiting for implement GPS') });
 }
 for (const id of ['passive-arm', 'rn-passive']) document.getElementById(id).addEventListener('pointerdown', e => {
   e.stopPropagation(); transport.send('passive.set|' + (tick && tick.passive && tick.passive.requested ? '0' : '1'));

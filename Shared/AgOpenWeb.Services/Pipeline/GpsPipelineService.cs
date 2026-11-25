@@ -171,6 +171,7 @@ public sealed class GpsPipelineService : IGpsPipelineService
     // ── Pipeline-owned guidance state (only touched on background thread) ─
     private Models.Track.TrackGuidanceState? _trackGuidanceState;
     private bool _passiveRequested;
+    private bool _toolGpsSimulation;
     private Models.Track.PassiveGuidanceInput? _passiveInput;
     // Previous along-track travel direction; a change forces a global nearest
     // re-acquire so a stranded local index can recover (#422).
@@ -515,6 +516,7 @@ public sealed class GpsPipelineService : IGpsPipelineService
         // empty state). Snap applies to HowManyPathsAway before the display-
         // track computation so this cycle's visuals reflect the new pass.
         var intents = _intents.Drain();
+        if(intents.ToolGpsSimulation is bool simulateToolGps) _toolGpsSimulation=simulateToolGps;
         if(intents.PassiveRequested is bool passiveRequested) _passiveRequested=passiveRequested;
         if (intents.ClearYouTurn)
             YouTurnStateMachine.ClearState(_youTurn);
@@ -825,20 +827,6 @@ public sealed class GpsPipelineService : IGpsPipelineService
         double driftedNorthing = posNorthing + driftN;
         double headingRad = pos.Heading * Math.PI / 180.0;
 
-        if(!_configStore.Tool.Passive.Enabled) _passiveRequested=false;
-        var toolFix=_autoSteerService.ImplementGps;
-        var toolPlane=committedLocalPlane??_cycleLocalPlane;
-        var toolCoord=toolFix!=null&&toolPlane!=null?toolPlane.ConvertWgs84ToGeoCoord(new Wgs84(toolFix.Latitude,toolFix.Longitude)):default;
-        var toolConfig=_configStore.Tool;
-        _passiveInput=new Models.Track.PassiveGuidanceInput {
-            Settings=toolConfig.Passive,Now=DateTime.UtcNow,Requested=_passiveRequested,Fix=toolFix,
-            HasLocalPlane=toolPlane!=null,ToolEast=toolCoord.Easting+driftE,ToolNorth=toolCoord.Northing+driftN,
-            Context=string.Concat(_configStore.ActiveVehicleProfileName,"|",_configStore.ActiveToolProfileName,"|",track?.Name,"|",passNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),"|",nudgeOffset.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-            InputError=_autoSteerService.ImplementGpsError,Trailing=toolConfig.IsToolTrailing||toolConfig.IsToolTBT,TowBetween=toolConfig.IsToolTBT,
-            Front=toolConfig.IsToolFrontFixed,Articulated=_configStore.Vehicle.Type==VehicleType.FourWD,
-            Hitch=toolConfig.IsToolTrailing||toolConfig.IsToolTBT?-Math.Abs(_configStore.Vehicle.HitchLength):toolConfig.HitchLength*(toolConfig.IsToolFrontFixed?1:-1),
-            Drawbar=toolConfig.TrailingHitchLength,TankDrawbar=toolConfig.TankTrailingHitchLength,WorkingBar=toolConfig.TrailingToolToPivotLength,Width=toolConfig.Width };
-
         // ── (2b) Publish canonical pose to the position estimator ───────
         // The estimator is the bridge between GPS arrivals (10 Hz) and
         // the host control loop (100 Hz). Readers — control loop,
@@ -982,6 +970,37 @@ public sealed class GpsPipelineService : IGpsPipelineService
         bool isToolReady = _toolPositionService.IsToolPositionReady;
         double toolWidth = config.ActualToolWidth;
 
+        if(!_configStore.Tool.Passive.Enabled) _passiveRequested=false;
+        var toolFix=_autoSteerService.ImplementGps;
+        var toolPlane=committedLocalPlane??_cycleLocalPlane;
+        var toolCoord=toolFix!=null&&toolPlane!=null?toolPlane.ConvertWgs84ToGeoCoord(new Wgs84(toolFix.Latitude,toolFix.Longitude)):default;
+        var toolConfig=_configStore.Tool;
+        if(!simulatorEnabled || data.SentenceType!=AgOpenWeb.Models.GpsSentenceType.Simulator) _toolGpsSimulation=false;
+        bool simulatedToolGps=_toolGpsSimulation && simulatorEnabled && data.SentenceType==AgOpenWeb.Models.GpsSentenceType.Simulator;
+        double toolEast=toolCoord.Easting+driftE, toolNorth=toolCoord.Northing+driftN;
+        if(simulatedToolGps)
+        {
+            toolFix=null;
+            // Fixed implements use tractor heading directly; only trailers need movement to settle.
+            if(isToolReady || !(toolConfig.IsToolTrailing || toolConfig.IsToolTBT))
+            {
+                // Reverse the antenna-to-working-point transform. The independent
+                // trailed-tool model supplies the working bar, never the guidance line.
+                var antenna=AgOpenWeb.Services.Passive.ToolGpsSimulator.AntennaPosition(toolPos.Easting,toolPos.Northing,toolHeading,toolConfig.Passive);
+                toolEast=antenna.East; toolNorth=antenna.North;
+                var now=DateTime.UtcNow;
+                double body=toolHeading*180.0/Math.PI;
+                toolFix=new(now,0,0,4,pos.Speed,body-toolConfig.Passive.HeadingOffset,double.NaN,double.NaN,now,toolConfig.Passive.InvertRoll?-toolConfig.Passive.RollZero:toolConfig.Passive.RollZero);
+            }
+        }
+        _passiveInput=new Models.Track.PassiveGuidanceInput {
+            Settings=toolConfig.Passive,Now=DateTime.UtcNow,Requested=_passiveRequested,Fix=toolFix,
+            HasLocalPlane=toolPlane!=null,ToolEast=toolEast,ToolNorth=toolNorth,
+            Context=string.Concat(simulatedToolGps?"sim|":"live|",_configStore.ActiveVehicleProfileName,"|",_configStore.ActiveToolProfileName,"|",track?.Name,"|",passNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),"|",nudgeOffset.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            InputError=simulatedToolGps?"Waiting for simulated tool position":_autoSteerService.ImplementGpsError,Trailing=toolConfig.IsToolTrailing||toolConfig.IsToolTBT,TowBetween=toolConfig.IsToolTBT,
+            Front=toolConfig.IsToolFrontFixed,Articulated=_configStore.Vehicle.Type==VehicleType.FourWD,
+            Hitch=toolConfig.IsToolTrailing||toolConfig.IsToolTBT?-Math.Abs(_configStore.Vehicle.HitchLength):toolConfig.HitchLength*(toolConfig.IsToolFrontFixed?1:-1),
+            Drawbar=toolConfig.TrailingHitchLength,TankDrawbar=toolConfig.TankTrailingHitchLength,WorkingBar=toolConfig.TrailingToolToPivotLength,Width=toolConfig.Width };
 
         // Map positions are now sent via GpsCycleResult → ViewModel → MapRenderState.
         // The pipeline does NOT call _mapService directly.
@@ -1376,7 +1395,7 @@ public sealed class GpsPipelineService : IGpsPipelineService
                 justCompleted: youTurnCompleted || (youTurnTickEffects?.TurnCompleted ?? false)),
             Guidance = BuildGuidanceSnapshot(
                 _guidanceWorking, displayTrack, baseTrack, hasGuidance,
-                diagPathAnchorA, diagPathAnchorB, diagTurnPathCount, diagAntiTangentGuardFired),
+                diagPathAnchorA, diagPathAnchorB, diagTurnPathCount, diagAntiTangentGuardFired) with { Passive = _guidanceWorking.Passive with { SimulatedGps = simulatedToolGps } },
 
             // Sections
             SectionStates = secStatesArr,

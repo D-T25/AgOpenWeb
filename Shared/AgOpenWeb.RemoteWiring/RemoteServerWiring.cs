@@ -99,6 +99,9 @@ public static partial class RemoteServerWiring
                                         && vm.ToggleSectionCommand?.CanExecute(si) == true)
                                         vm.ToggleSectionCommand.Execute(si);
                                     return;
+                                case "passive.simulator":
+                                    services.GetRequiredService<AgOpenWeb.Models.Pipeline.IPipelineIntents>().RequestToolGpsSimulation(arg=="1");
+                                    return;
                                 case "passive.set":
                                     services.GetRequiredService<AgOpenWeb.Models.Pipeline.IPipelineIntents>().RequestPassiveGuidance(arg=="1");
                                     return;
