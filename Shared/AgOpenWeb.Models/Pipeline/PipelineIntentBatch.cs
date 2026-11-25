@@ -21,6 +21,7 @@ public readonly record struct PipelineIntentBatch
     /// <summary>
     /// Whether the UI requested a full YouTurn state reset since the previous drain.
     /// </summary>
+    public bool? PassiveRequested { get; init; }
     public bool ClearYouTurn { get; init; }
 
     /// <summary>

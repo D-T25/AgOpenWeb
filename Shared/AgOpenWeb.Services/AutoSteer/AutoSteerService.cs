@@ -160,9 +160,16 @@ public class AutoSteerService : IAutoSteerService
         _smartWas = smartWas;
     }
 
+    private readonly AgOpenWeb.Services.Passive.ImplementGpsReceiver _implementGps=new();
+    public AgOpenWeb.Models.GPS.ImplementGpsFix? ImplementGps => _implementGps.Latest;
+    public string ImplementGpsError => _implementGps.Error;
+    public void RefreshImplementGps()
+    { if(_isEnabled&&_configStore.Tool.Passive.Enabled)_implementGps.Start();else _implementGps.Dispose(); }
+
     public void Start()
     {
         _isEnabled = true;
+        RefreshImplementGps();
         _udpService.DataReceived += OnUdpDataReceived;
 
         // Subscribe before the initial emission so a settings write that
@@ -180,6 +187,7 @@ public class AutoSteerService : IAutoSteerService
 
     public void Stop()
     {
+        _implementGps.Dispose();
         _udpService.DataReceived -= OnUdpDataReceived;
         UnsubscribeFromConfigChanges();
         _isEnabled = false;
@@ -222,6 +230,7 @@ public class AutoSteerService : IAutoSteerService
     /// </summary>
     private void OnConfigPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        RefreshImplementGps();
         _configEmitTimer.Change(_configEmitDelayMs, Timeout.Infinite);
     }
 

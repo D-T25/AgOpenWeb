@@ -26,6 +26,8 @@ namespace AgOpenWeb.Models.State;
 /// </summary>
 public class GuidanceState : ObservableObject
 {
+    public AgOpenWeb.Models.Pipeline.PassiveGuidanceStatus Passive { get; set; } = new();
+
     // Active track (unified Track model)
     private Track.Track? _activeTrack;
     public Track.Track? ActiveTrack
@@ -199,6 +201,7 @@ public class GuidanceState : ObservableObject
 
     public void Reset()
     {
+        Passive = new();
         ActiveTrack = null;
         DisplayLine = null;
         IsGuidanceActive = false;

@@ -31,6 +31,9 @@ public class ToolConfig : ObservableObject
     /// </summary>
     public const int MaxSections = 64;
 
+    private PassiveGuidanceConfig _passive = new();
+    public PassiveGuidanceConfig Passive { get => _passive; set => SetProperty(ref _passive,value); }
+
     // Tool dimensions
     private double _width = 6.0;
     public double Width

@@ -70,6 +70,8 @@ public sealed class PipelineIntents : IPipelineIntents
         Interlocked.Exchange(ref _resetNudge, 1);
     }
 
+    private int _passiveRequest;
+    public void RequestPassiveGuidance(bool requested) => Interlocked.Exchange(ref _passiveRequest,requested?1:2);
     public PipelineIntentBatch Drain()
     {
         int manual = Interlocked.Exchange(ref _manualYouTurn, 0);
@@ -94,6 +96,7 @@ public sealed class PipelineIntents : IPipelineIntents
 
         return new PipelineIntentBatch
         {
+            PassiveRequested = Interlocked.Exchange(ref _passiveRequest,0) switch {1=>true,2=>false,_=>(bool?)null},
             ManualYouTurn = manualYouTurn,
             ClearYouTurn = clear == 1,
             GuidanceSnap = guidanceSnap,

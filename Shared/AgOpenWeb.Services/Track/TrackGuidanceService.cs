@@ -32,6 +32,8 @@ namespace AgOpenWeb.Services.Track;
 /// </summary>
 public class TrackGuidanceService : ITrackGuidanceService
 {
+    private readonly AgOpenWeb.Services.Passive.PassiveGuidanceService _passive=new();
+    public void ResetPassive() => _passive.Reset();
     private const double PIBy2 = Math.PI / 2.0;
     private const double TwoPI = Math.PI * 2.0;
 
@@ -93,11 +95,13 @@ public class TrackGuidanceService : ITrackGuidanceService
             State = new TrackGuidanceState()
         };
 
+        if(input.Passive==null || input.UseStanley || input.IsYouTurnTriggered) _passive.Reset();
         // Validate input
         if (input.Track?.Points == null || input.Track.Points.Count < 2)
         {
             output.DistanceFromLinePivot = 32000;
             output.GuidanceLineDistanceOff = 32000;
+            _passive.Reset();
             return output;
         }
 
@@ -135,6 +139,7 @@ public class TrackGuidanceService : ITrackGuidanceService
         {
             output.DistanceFromLinePivot = 32000;
             output.GuidanceLineDistanceOff = 32000;
+            _passive.Reset();
             return output;
         }
 
@@ -172,6 +177,7 @@ public class TrackGuidanceService : ITrackGuidanceService
         {
             output.DistanceFromLinePivot = 32000;
             output.GuidanceLineDistanceOff = 32000;
+            _passive.Reset();
             return output;
         }
 
@@ -188,6 +194,7 @@ public class TrackGuidanceService : ITrackGuidanceService
         // Apply algorithm-specific calculations
         if (input.UseStanley)
         {
+            output.Passive=_passive.Apply(input,output); // reports the unsupported-algorithm reason, without applying an offset
             CalculateStanleyGuidance(input, output, points, indexA, indexB, ptA, ptB, dx, dz, isHeadingSameWay);
         }
         else
@@ -255,6 +262,7 @@ public class TrackGuidanceService : ITrackGuidanceService
             }
         }
 
+        output.Passive=_passive.Apply(input,output);
         // Calculate Pure Pursuit steering
         double goalPointDistSq = GeometryMath.DistanceSquared(
             output.GoalPoint.Northing, output.GoalPoint.Easting,

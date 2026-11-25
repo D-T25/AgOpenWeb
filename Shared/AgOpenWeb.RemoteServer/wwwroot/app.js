@@ -343,7 +343,7 @@ const transport = RemoteTransport.create({
       renderFlagList();
   },
   onTick(t) {
-    tick = t;
+    tick = t; renderPassive(t);
     reverseBadge.classList.toggle('show', !!(t.op && t.op.reverse)); // #125
     if (t.pose) {
       lastTick = {
@@ -2401,7 +2401,7 @@ function cfgGet(key) {
   }
   const p = key.split('.'); return config[p[0]] && config[p[0]][p[1]];
 }
-function cfgSend(key, val) { transport.send('config.set|' + key + ':' + val); }
+function cfgSend(key, val) { transport.send((key.startsWith('passive.') ? 'passive.config|' : 'config.set|') + key + ':' + val); }
 // Tabs.
 for (const t of vcPanel.querySelectorAll('.cfg-tab'))
   t.addEventListener('pointerdown', e => {
@@ -6203,6 +6203,14 @@ function renderSkia(canvas, rp) {
   drawEditHandlesSk(canvas); // stage-4 on-map edit handles (drag points to reshape)
   drawHitchSk(canvas); // implement hitch line (under the tool footprint)
   toolFootprintSk(canvas);
+  // Distinguish the measured working point from the existing predicted implement body.
+  if (tick && tick.passive && tick.passive.toolValid) {
+    const p = tick.passive, xy = w2s(p.toolEast, p.toolNorth);
+    if (Number.isFinite(xy[0]) && Number.isFinite(xy[1])) {
+      if (!SKP.passivePoint) { SKP.passivePoint = new CK.Paint(); SKP.passivePoint.setStyle(CK.PaintStyle.Stroke); SKP.passivePoint.setColor(ckColor('#00ffff')); SKP.passivePoint.setStrokeWidth(3); SKP.passivePoint.setAntiAlias(true); }
+      canvas.drawCircle(xy[0], xy[1], 7, SKP.passivePoint);
+    }
+  }
   if (rp) { vehicleSk(canvas, rp); svennArrowSk(canvas, rp); }
   drawGoalSk(canvas); // #95 — Pure Pursuit target (over the vehicle)
   lightbarSk(canvas); // screen-space overlay, still inside the dpr scale
@@ -6242,3 +6250,21 @@ function skFrame() {
   requestAnimationFrame(skFrame);
 }
 skFrame();
+
+// Backend-owned passive steering. Neither section state nor browser geometry enters this flow.
+function renderPassive(t) {
+  const p = t && t.passive || {}, enabled = config && config.passive && config.passive.enabled;
+  for (const id of ['passive-arm', 'rn-passive']) {
+    const b = document.getElementById(id); b.disabled = !iHoldControl || !enabled;
+    b.classList.toggle('active', !!p.requested);
+    if (id === 'passive-arm') b.textContent = p.requested ? tr('Passive on') : tr('Passive off');
+    if (id === 'rn-passive') b.hidden = !enabled;
+  }
+  document.getElementById('passive-telemetry').textContent =
+    tr('Tool error {error} cm · Tractor offset {offset} cm · {heading} · {reason}', {
+      error: ((p.toolError || 0) * 100).toFixed(1), offset: ((p.offset || 0) * 100).toFixed(1),
+      heading: p.headingSource || tr('Unavailable'), reason: p.reason || tr('Waiting for implement GPS') });
+}
+for (const id of ['passive-arm', 'rn-passive']) document.getElementById(id).addEventListener('pointerdown', e => {
+  e.stopPropagation(); transport.send('passive.set|' + (tick && tick.passive && tick.passive.requested ? '0' : '1'));
+});

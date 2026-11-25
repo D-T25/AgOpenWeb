@@ -191,6 +191,7 @@ public partial class MainViewModel
             // single UI-thread point where they become PropertyChanged events
             // on State.Guidance.
             var sg = State.Guidance;
+            sg.Passive = g.Passive;
             sg.ActiveTrack = g.ActiveTrack;
             sg.IsGuidanceActive = g.IsGuidanceActive;
             sg.CrossTrackError = g.CrossTrackError;

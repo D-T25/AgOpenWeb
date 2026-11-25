@@ -180,7 +180,7 @@ public record TickDto(
     // Engaged, but the steer module reports it isn't steering (#126).
     bool ModuleNotSteering,
     // Heading chart: GPS fix-to-fix heading, degrees (#111).
-    double ChartGpsHeading);
+    double ChartGpsHeading, string PassiveJson = "");
 
 /// <summary>Top status-bar readouts (Phase 1), sent at a low rate. GPS fix quality
 /// + correction age + sat count; the units preference (so the client formats speed
@@ -358,7 +358,7 @@ public record NtripRtcmTypeDto(int Type, long Count, double EverySeconds, double
 /// Tool + Uturn + Tram + Machine.</summary>
 public record ConfigDto(VehicleConfigDto Vehicle, GpsConfigDto Gps, RollConfigDto Roll,
     ToolConfigDto Tool, UturnConfigDto Uturn, TramConfigDto Tram, MachineConfigDto Machine,
-    DisplayConfigDto Display, AutoSteerConfigDto AutoSteer);
+    DisplayConfigDto Display, AutoSteerConfigDto AutoSteer, string PassiveJson = "");
 
 /// <summary>AutoSteer config panel (ConfigStore.AutoSteer) — the full native 9-tab
 /// surface. Grouped by tab: Pure-Pursuit/Stanley, Steering-Sensor, Deadzone/Timing,

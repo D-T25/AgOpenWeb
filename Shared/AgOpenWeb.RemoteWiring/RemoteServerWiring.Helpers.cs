@@ -69,6 +69,25 @@ public static partial class RemoteServerWiring
         var ast = store.AutoSteer;
         switch (key)
         {
+            case "passive.enabled": tool.Passive.Enabled=B(); return;
+            case "passive.earlyRetry": tool.Passive.EarlyRetry=B(); return;
+            case "passive.useGeometry": tool.Passive.UseGeometry=B(); return;
+            case "passive.invertRoll": tool.Passive.InvertRoll=B(); return;
+            case "passive.tracking": if(D(out var pTracking)&&double.IsFinite(pTracking))tool.Passive.Tracking=Math.Clamp(pTracking,50,200); return;
+            case "passive.heading": if(D(out var pHeading)&&double.IsFinite(pHeading))tool.Passive.Heading=Math.Clamp(pHeading,50,200); return;
+            case "passive.acquire": if(D(out var pAcquire)&&double.IsFinite(pAcquire))tool.Passive.Acquire=Math.Clamp(pAcquire,50,200); return;
+            case "passive.curveResponse": if(D(out var pCurveResponse)&&double.IsFinite(pCurveResponse))tool.Passive.CurveResponse=Math.Clamp(pCurveResponse,0,300); return;
+            case "passive.interval": if(D(out var pInterval)&&double.IsFinite(pInterval))tool.Passive.Interval=Math.Clamp(pInterval,0,25); return;
+            case "passive.strength": if(D(out var pStrength)&&double.IsFinite(pStrength))tool.Passive.Strength=Math.Clamp(pStrength,50,200); return;
+            case "passive.straightLimit": if(D(out var pStraightLimit)&&double.IsFinite(pStraightLimit))tool.Passive.StraightLimit=Math.Clamp(pStraightLimit,0.1,3); return;
+            case "passive.curveLimit": if(D(out var pCurveLimit)&&double.IsFinite(pCurveLimit))tool.Passive.CurveLimit=Math.Clamp(pCurveLimit,0.1,3); return;
+            case "passive.lookAhead": if(D(out var pLookAhead)&&double.IsFinite(pLookAhead))tool.Passive.LookAhead=Math.Clamp(pLookAhead,0,2); return;
+            case "passive.antennaHeight": if(D(out var pAntennaHeight)&&double.IsFinite(pAntennaHeight))tool.Passive.AntennaHeight=Math.Clamp(pAntennaHeight,0,10); return;
+            case "passive.antennaOffset": if(D(out var pAntennaOffset)&&double.IsFinite(pAntennaOffset))tool.Passive.AntennaOffset=Math.Clamp(pAntennaOffset,-10,10); return;
+            case "passive.antennaToWorkingPoint": if(D(out var pAntennaToWorkingPoint)&&double.IsFinite(pAntennaToWorkingPoint))tool.Passive.AntennaToWorkingPoint=Math.Clamp(pAntennaToWorkingPoint,-30,30); return;
+            case "passive.headingOffset": if(D(out var pHeadingOffset)&&double.IsFinite(pHeadingOffset))tool.Passive.HeadingOffset=Math.Clamp(pHeadingOffset,-180,180); return;
+            case "passive.rollZero": if(D(out var pRollZero)&&double.IsFinite(pRollZero))tool.Passive.RollZero=Math.Clamp(pRollZero,-45,45); return;
+
             case "units": store.IsMetric = val == "metric"; cfg.SaveAppSettings(); return; // device setting
             // --- Network IO module-present flags (ConfigStore.Connections). Device
             // settings → persist now; they drive the Status frame's *Configured dots. ---

@@ -26,6 +26,9 @@ namespace AgOpenWeb.Services.Interfaces;
 /// </summary>
 public interface IAutoSteerService
 {
+    AgOpenWeb.Models.GPS.ImplementGpsFix? ImplementGps => null;
+    string ImplementGpsError => "";
+    void RefreshImplementGps() { }
     /// <summary>What the GPS module last sent (raw sentences, rate, missed), for the
     /// System Data card.</summary>
     AgOpenWeb.Services.Gps.GpsSentenceMonitor GpsSentences { get; }

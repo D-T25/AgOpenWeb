@@ -27,6 +27,8 @@ namespace AgOpenWeb.Models.Pipeline;
 /// </summary>
 public class GuidanceWorkingState
 {
+    public AgOpenWeb.Models.Pipeline.PassiveGuidanceStatus Passive { get; set; } = new();
+
     // Active track (unified Track model)
     public Track.Track? ActiveTrack { get; set; }
     public bool IsGuidanceActive { get; set; }
@@ -75,6 +77,7 @@ public class GuidanceWorkingState
 
     public void Reset()
     {
+        Passive = new();
         ActiveTrack = null;
         IsGuidanceActive = false;
         CrossTrackError = HeadingError = SteerAngle = 0;

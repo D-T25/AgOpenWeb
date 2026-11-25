@@ -25,6 +25,8 @@ namespace AgOpenWeb.Services.Interfaces;
 /// </summary>
 public interface ITrackGuidanceService
 {
+    void ResetPassive() { }
+
     /// <summary>
     /// Calculate steering guidance for a track.
     /// </summary>

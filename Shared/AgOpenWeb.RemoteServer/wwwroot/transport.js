@@ -119,8 +119,9 @@ window.RemoteTransport = {
           op.reverse = !!u8(); // #125 — vehicle reversing
           op.moduleNotSteering = !!u8(); // #126 — engaged, module reports not steering
           const chartGpsHeading = f32(); // #111 — heading chart, GPS fix-to-fix
+          const passive = JSON.parse(str() || '{}');
           handlers.onTick && handlers.onTick({
-            sceneVersion, pose, fix, sections, crossTrackError, guidanceActive, lineLabel,
+            passive, sceneVersion, pose, fix, sections, crossTrackError, guidanceActive, lineLabel,
             activeTrackName: atn.length ? atn : null, tool, op, roll, tools,
             headlandDist, headlandWarn, steerAngleError,
             chartSetSteer, chartActualSteer, chartPwm, chartImuHeading,
@@ -343,7 +344,8 @@ window.RemoteTransport = {
             lineWidth: i32(), nudgeDistance: i32(), nextGuidanceTime: f64(), cmPerPixel: i32(),
             lightbarEnabled: !!u8(), steerBarEnabled: !!u8(), guidanceBarOn: !!u8(),
           };
-          handlers.onConfig && handlers.onConfig({ vehicle, gps, roll, tool, uturn, tram, machine, display, autosteer });
+          const passive = JSON.parse(str() || '{}');
+          handlers.onConfig && handlers.onConfig({ vehicle, gps, roll, tool, uturn, tram, machine, display, autosteer, passive });
           break;
         }
         case TYPE.WIZARD: {

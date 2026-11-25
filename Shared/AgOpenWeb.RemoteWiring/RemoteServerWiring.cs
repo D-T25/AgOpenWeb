@@ -99,9 +99,18 @@ public static partial class RemoteServerWiring
                                         && vm.ToggleSectionCommand?.CanExecute(si) == true)
                                         vm.ToggleSectionCommand.Execute(si);
                                     return;
+                                case "passive.set":
+                                    services.GetRequiredService<AgOpenWeb.Models.Pipeline.IPipelineIntents>().RequestPassiveGuidance(arg=="1");
+                                    return;
+                                case "passive.config":
+                                    var pi=arg.IndexOf(':');
+                                    if(pi>0&&arg.StartsWith("passive.",StringComparison.Ordinal))
+                                        ApplyConfigSet(services.GetRequiredService<AgOpenWeb.Models.Configuration.ConfigurationStore>(),configService,arg[..pi],arg[(pi+1)..]);
+                                    services.GetRequiredService<IAutoSteerService>().RefreshImplementGps();
+                                    return;
                                 case "config.set": // config bridge (Phase 9a). arg = "key:value"
                                     var ci = arg.IndexOf(':');
-                                    if (ci > 0)
+                                    if (ci > 0 && !arg.StartsWith("passive.",StringComparison.Ordinal))
                                         ApplyConfigSet(
                                             services.GetRequiredService<AgOpenWeb.Models.Configuration.ConfigurationStore>(),
                                             configService, arg[..ci], arg[(ci + 1)..]);
@@ -679,7 +688,7 @@ public static partial class RemoteServerWiring
                     // Tier-2 (live actuation) ids — honored only while a client holds
                     // fresh control authority (Phase 2 safety gate).
                     server.IsRestrictedCommand = id =>
-                        id.StartsWith("section.") || id.StartsWith("autosteer.")
+                        id.StartsWith("section.") || id.StartsWith("autosteer.") || id.StartsWith("passive.")
                         || id.StartsWith("isobus.") // switches the implement's section control
                         || id.StartsWith("youturn.") || id.StartsWith("contour.")
                         || (id.StartsWith("track.") && !UngatedTrackIds.Contains(id)) // see below
@@ -703,6 +712,7 @@ public static partial class RemoteServerWiring
                         }
                         dispatcher.Post(() =>
                         {
+                            services.GetRequiredService<AgOpenWeb.Models.Pipeline.IPipelineIntents>().RequestPassiveGuidance(false);
                             if (vm.IsAutoSteerEngaged
                                 && vm.ToggleAutoSteerCommand?.CanExecute(null) == true)
                                 vm.ToggleAutoSteerCommand.Execute(null);

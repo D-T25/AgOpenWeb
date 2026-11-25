@@ -154,6 +154,7 @@ public static class ProfileJsonServiceV1
             },
             Tool = new ToolDto
             {
+                Passive = AgOpenWeb.Services.Passive.PassiveSettings.Sanitize(store.Tool.Passive),
                 Width = store.Tool.Width,
                 Overlap = store.Tool.Overlap,
                 Offset = store.Tool.Offset,
@@ -301,6 +302,7 @@ public static class ProfileJsonServiceV1
         store.Tool.Zones = dto.Tool?.Zones ?? 2;
         if (dto.Tool?.ZoneRanges != null && dto.Tool.ZoneRanges.Length == 9)
             store.Tool.ZoneRanges = (int[])dto.Tool.ZoneRanges.Clone();
+        store.Tool.Passive = AgOpenWeb.Services.Passive.PassiveSettings.Sanitize(dto.Tool?.Passive);
         store.Tool.IsWorkSwitchEnabled = dto.Tool?.IsWorkSwitchEnabled ?? false;
         store.Tool.IsWorkSwitchActiveLow = dto.Tool?.IsWorkSwitchActiveLow ?? false;
         store.Tool.IsWorkSwitchManualSections = dto.Tool?.IsWorkSwitchManualSections ?? false;
@@ -414,6 +416,7 @@ public static class ProfileJsonServiceV1
 
     internal class ToolDto
     {
+        public AgOpenWeb.Models.Configuration.PassiveGuidanceConfig? Passive { get; set; }
         public double Width { get; set; }
         public double Overlap { get; set; }
         public double Offset { get; set; }

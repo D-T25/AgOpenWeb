@@ -405,6 +405,11 @@
       cursor: pointer; font: 600 12px system-ui, sans-serif; }
     .cfg-typebtn.active { background: #1f6fb2; color: #fff; }
     .cfg-grid { display: grid; grid-template-columns: auto max-content; gap: 7px 12px; align-items: center; }
+    /* Passive tuning stays in a compact left panel, with bounded scrolling. */
+    #toolcfg:has(#tc-passive:not([hidden])) { width: min(480px, calc(100vw - 100px)); }
+    #tc-passive { font: 14px/1.4 system-ui, sans-serif; max-height: calc(100vh - 280px); overflow-y: auto; padding-right: 8px; }
+    #tc-passive .cfg-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 220px); }
+    #tc-passive .as-valrow .cfg-slider { flex: 1; width: 100px; min-width: 60px; }
     .cfg-grid label { color: var(--text-2); font: 500 13px system-ui, sans-serif; }
     /* Right-sized to expected data (#41): ~5-6 digits (e.g. "12.34", "360.0", "-0.35").
        Wider boxes just waste horizontal space. Spinners removed (useless on touch, eat width). */
@@ -1554,9 +1559,37 @@
     <div id="tc-name" class="ln-sub">—</div>
     <div class="cfg-tabs">
       <button class="cfg-tab active" data-strip="tc-top" data-tab="tc-tool">Tool</button>
+      <button class="cfg-tab" data-strip="tc-top" data-tab="tc-passive">Passive</button>
       <button class="cfg-tab" data-strip="tc-top" data-tab="tc-uturn">U-Turn</button>
       <button class="cfg-tab" data-strip="tc-top" data-tab="tc-machine">Machine</button>
       <button class="cfg-tab" data-strip="tc-top" data-tab="tc-tram">Tram</button>
+    </div>
+    <div id="tc-passive" class="cfg-body" data-strip="tc-top" hidden>
+      <p>Manual passive implement guidance. Enable the mode, then use the Passive button while tractor autosteer is on. Sections do not control guidance.</p>
+      <div class="cfg-grid passive-toggle"><label>Enable passive mode</label><button class="cfg-tgl" data-key="passive.enabled">Off</button></div>
+      <button id="passive-arm" class="ln-savebtn rn-gated" data-cmd="passive.set">Passive off</button>
+      <p id="passive-telemetry">Waiting for implement GPS</p>
+      <div class="cfg-grid">
+        <label>Tracking Sensitivity</label><div class="as-valrow"><input class="cfg-slider" data-key="passive.tracking" data-fmt="f0" type="range" min="50" max="200" step="1"><input class="cfg-num" data-key="passive.tracking" type="number" min="50" max="200" step="1"></div>
+        <label>Heading Sensitivity</label><div class="as-valrow"><input class="cfg-slider" data-key="passive.heading" data-fmt="f0" type="range" min="50" max="200" step="1"><input class="cfg-num" data-key="passive.heading" type="number" min="50" max="200" step="1"></div>
+        <label>Acquire Sensitivity</label><div class="as-valrow"><input class="cfg-slider" data-key="passive.acquire" data-fmt="f0" type="range" min="50" max="200" step="1"><input class="cfg-num" data-key="passive.acquire" type="number" min="50" max="200" step="1"></div>
+        <label>Curve Response (%)</label><div class="as-valrow"><input class="cfg-slider" data-key="passive.curveResponse" data-fmt="f0" type="range" min="0" max="300" step="1"><input class="cfg-num" data-key="passive.curveResponse" type="number" min="0" max="300" step="1"></div>
+        <label>Correction Interval (s)</label><div class="as-valrow"><input class="cfg-slider" data-key="passive.interval" data-fmt="f1" type="range" min="0" max="25" step="0.1"><input class="cfg-num" data-key="passive.interval" type="number" min="0" max="25" step="0.1"></div>
+        <label>Correction Strength</label><div class="as-valrow"><input class="cfg-slider" data-key="passive.strength" data-fmt="f0" type="range" min="50" max="200" step="1"><input class="cfg-num" data-key="passive.strength" type="number" min="50" max="200" step="1"></div>
+        <label>Straight Maximum Offset (m)</label><div class="as-valrow"><input class="cfg-slider" data-key="passive.straightLimit" data-fmt="f1" type="range" min="0.1" max="3" step="0.1"><input class="cfg-num" data-key="passive.straightLimit" type="number" min="0.1" max="3" step="0.1"></div>
+        <label>Curve Maximum Offset (m)</label><div class="as-valrow"><input class="cfg-slider" data-key="passive.curveLimit" data-fmt="f1" type="range" min="0.1" max="3" step="0.1"><input class="cfg-num" data-key="passive.curveLimit" type="number" min="0.1" max="3" step="0.1"></div>
+        <label>Tool Look-ahead (s)</label><div class="as-valrow"><input class="cfg-slider" data-key="passive.lookAhead" data-fmt="f1" type="range" min="0" max="2" step="0.1"><input class="cfg-num" data-key="passive.lookAhead" type="number" min="0" max="2" step="0.1"></div>
+      </div><div class="cfg-grid passive-toggle"><label>Retry early if tool is not improving</label><button class="cfg-tgl" data-key="passive.earlyRetry">Off</button></div>
+      <div class="cfg-grid passive-toggle"><label>Use verified profile geometry</label><button class="cfg-tgl" data-key="passive.useGeometry">Off</button></div>
+      <p>Uses the existing hitch, trailing lengths, working-point distance and width. Check these measurements first. Geometry is unsupported on articulated tractors.</p>
+      <div class="cfg-grid">
+        <label>Implement antenna height (m)</label><input class="cfg-num" data-key="passive.antennaHeight" type="number" step="0.01">
+        <label>Implement antenna lateral offset (m; positive antenna left of working point)</label><input class="cfg-num" data-key="passive.antennaOffset" type="number" step="0.01">
+        <label>Antenna ahead of working point (m)</label><input class="cfg-num" data-key="passive.antennaToWorkingPoint" type="number" step="0.01">
+        <label>Heading mounting offset (degrees)</label><input class="cfg-num" data-key="passive.headingOffset" type="number" step="0.01">
+        <label>Implement roll zero (degrees)</label><input class="cfg-num" data-key="passive.rollZero" type="number" step="0.01">
+      </div><div class="cfg-grid passive-toggle"><label>Invert implement roll</label><button class="cfg-tgl" data-key="passive.invertRoll">Off</button></div>
+      <p>Implement PANDA/PAOGI input: UDP 19999. Dual heading, single GNSS with IMU, and position-derived heading are supported. Use the existing Save tool profile action to keep settings.</p>
     </div>
     <!-- ===== TOOL / IMPLEMENT ===== -->
     <div id="tc-tool" class="cfg-body" data-strip="tc-top">
@@ -2643,6 +2676,7 @@
     <button id="rn-auto" class="rn-btn"><img id="rn-auto-i" class="rn-ic" alt="Sections"></button>
     <button id="rn-isobus" class="rn-btn" style="display:none"><img id="rn-isobus-i" class="rn-ic" alt="ISOBUS section control"></button>
     <button id="rn-youturn" class="rn-btn"><img id="rn-youturn-i" class="rn-ic" alt="U-Turn"></button>
+    <button id="rn-passive" class="rn-btn" title="Passive implement guidance">Tool</button>
     <button id="rn-steer" class="rn-btn"><img id="rn-steer-i" class="rn-ic" alt="AutoSteer"></button>
     <div id="rn-readonly"></div>
   </div>

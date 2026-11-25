@@ -387,6 +387,7 @@ public static class WireCodec
         // Tab 9 — Display
         w.Write(a.LineWidth); w.Write(a.NudgeDistance); w.Write(a.NextGuidanceTime); w.Write(a.CmPerPixel);
         DB(a.LightbarEnabled); DB(a.SteerBarEnabled); DB(a.GuidanceBarOn);
+        WriteStr(w,c.PassiveJson);
         return ms.ToArray();
     }
 
@@ -589,6 +590,7 @@ public static class WireCodec
         w.Write((byte)(t.IsReverse ? 1 : 0)); // #125 — reversing
         w.Write((byte)(t.ModuleNotSteering ? 1 : 0)); // #126 — engaged but module not steering
         w.Write((float)t.ChartGpsHeading); // f32 — heading chart GPS fix-to-fix (#111)
+        WriteStr(w,t.PassiveJson);
         return ms.ToArray();
     }
 

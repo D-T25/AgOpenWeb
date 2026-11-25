@@ -170,6 +170,8 @@ public sealed class GpsPipelineService : IGpsPipelineService
 
     // ── Pipeline-owned guidance state (only touched on background thread) ─
     private Models.Track.TrackGuidanceState? _trackGuidanceState;
+    private bool _passiveRequested;
+    private Models.Track.PassiveGuidanceInput? _passiveInput;
     // Previous along-track travel direction; a change forces a global nearest
     // re-acquire so a stranded local index can recover (#422).
     private bool _lastHeadingSameWay = true;
@@ -513,6 +515,7 @@ public sealed class GpsPipelineService : IGpsPipelineService
         // empty state). Snap applies to HowManyPathsAway before the display-
         // track computation so this cycle's visuals reflect the new pass.
         var intents = _intents.Drain();
+        if(intents.PassiveRequested is bool passiveRequested) _passiveRequested=passiveRequested;
         if (intents.ClearYouTurn)
             YouTurnStateMachine.ClearState(_youTurn);
         // #50. A snap mid-turn is IGNORED entirely: applying it would shift the
@@ -822,6 +825,20 @@ public sealed class GpsPipelineService : IGpsPipelineService
         double driftedNorthing = posNorthing + driftN;
         double headingRad = pos.Heading * Math.PI / 180.0;
 
+        if(!_configStore.Tool.Passive.Enabled) _passiveRequested=false;
+        var toolFix=_autoSteerService.ImplementGps;
+        var toolPlane=committedLocalPlane??_cycleLocalPlane;
+        var toolCoord=toolFix!=null&&toolPlane!=null?toolPlane.ConvertWgs84ToGeoCoord(new Wgs84(toolFix.Latitude,toolFix.Longitude)):default;
+        var toolConfig=_configStore.Tool;
+        _passiveInput=new Models.Track.PassiveGuidanceInput {
+            Settings=toolConfig.Passive,Now=DateTime.UtcNow,Requested=_passiveRequested,Fix=toolFix,
+            HasLocalPlane=toolPlane!=null,ToolEast=toolCoord.Easting+driftE,ToolNorth=toolCoord.Northing+driftN,
+            Context=string.Concat(_configStore.ActiveVehicleProfileName,"|",_configStore.ActiveToolProfileName,"|",track?.Name,"|",passNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),"|",nudgeOffset.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            InputError=_autoSteerService.ImplementGpsError,Trailing=toolConfig.IsToolTrailing||toolConfig.IsToolTBT,TowBetween=toolConfig.IsToolTBT,
+            Front=toolConfig.IsToolFrontFixed,Articulated=_configStore.Vehicle.Type==VehicleType.FourWD,
+            Hitch=toolConfig.IsToolTrailing||toolConfig.IsToolTBT?-Math.Abs(_configStore.Vehicle.HitchLength):toolConfig.HitchLength*(toolConfig.IsToolFrontFixed?1:-1),
+            Drawbar=toolConfig.TrailingHitchLength,TankDrawbar=toolConfig.TankTrailingHitchLength,WorkingBar=toolConfig.TrailingToolToPivotLength,Width=toolConfig.Width };
+
         // ── (2b) Publish canonical pose to the position estimator ───────
         // The estimator is the bridge between GPS arrivals (10 Hz) and
         // the host control loop (100 Hz). Readers — control loop,
@@ -1036,6 +1053,9 @@ public sealed class GpsPipelineService : IGpsPipelineService
             contourSteer = ProcessContour(contourOn, hasActiveField, driftedEasting, driftedNorthing,
                 headingRad, antennaE, antennaN, pos.Speed * 3.6, autoSteerEngaged, out contourDisplay);
 
+        if(!autoSteerEngaged||!hasTrack||isYouTurnTriggered||contourOn||!_configStore.Tool.Passive.Enabled)
+            _trackGuidanceService.ResetPassive();
+        _guidanceWorking.Passive=new(_passiveRequested,Reason:!_configStore.Tool.Passive.Enabled?"Disabled":!autoSteerEngaged?"Tractor steering off":isYouTurnTriggered?"U-turn":contourOn?"Contour not supported":"Waiting for track guidance");
         // ── (6) Guidance calculation ────────────────────────────────────
         double steerAngle = 0;
         double crossTrackError = 0;
@@ -1456,6 +1476,7 @@ public sealed class GpsPipelineService : IGpsPipelineService
     {
         // GuidanceState-mirrored fields (all populated from the cycle's
         // working state — Phase D D2 writes them there at end-of-branch).
+        Passive = src.Passive,
         ActiveTrack = src.ActiveTrack,
         IsGuidanceActive = src.IsGuidanceActive,
         CrossTrackError = src.CrossTrackError,
@@ -1595,6 +1616,7 @@ public sealed class GpsPipelineService : IGpsPipelineService
         var input = new Models.Track.TrackGuidanceInput
         {
             Track = currentTrack,
+            Passive = _passiveInput,
             PivotPosition = new Vec3(driftedEasting, driftedNorthing, headingRad),
             SteerPosition = new Vec3(steerE, steerN, headingRad),
             UseStanley = config.Guidance.IsStanley,
@@ -1627,6 +1649,7 @@ public sealed class GpsPipelineService : IGpsPipelineService
         var output = _trackGuidanceService.CalculateGuidance(input);
 
         // Store state for next iteration
+        _guidanceWorking.Passive=output.Passive;
         _trackGuidanceState = output.State;
         if (_trackGuidanceState != null)
             _trackGuidanceState.CurrentLocationIndex = output.CurrentLocationIndex;

@@ -25,6 +25,8 @@ namespace AgOpenWeb.Models.Track;
 /// </summary>
 public class TrackGuidanceInput
 {
+    public PassiveGuidanceInput? Passive { get; set; }
+
     /// <summary>
     /// The track to follow. Contains all points.
     /// For AB lines: 2 points. For curves: N points.

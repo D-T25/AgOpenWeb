@@ -24,6 +24,8 @@ namespace AgOpenWeb.Models.Track;
 /// </summary>
 public class TrackGuidanceOutput
 {
+    public AgOpenWeb.Models.Pipeline.PassiveGuidanceStatus Passive { get; set; } = new();
+
     /// <summary>
     /// Calculated steer angle in degrees.
     /// Positive = right, Negative = left.

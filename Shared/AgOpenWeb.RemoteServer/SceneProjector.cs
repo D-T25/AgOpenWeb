@@ -354,7 +354,7 @@ public sealed class SceneProjector
             g.GoalPoint.Northing,
             g.IsReverse,
             _state.Connections.IsModuleNotSteering,
-            hchart.Gps);
+            hchart.Gps, PassiveJson(_state.Guidance.Passive));
     }
 
     // Top status-bar readouts (Phase 1). All state-projected: fix/age/sats from
@@ -749,6 +749,8 @@ public sealed class SceneProjector
 
     // Config read-frame (Phase 9). Projects editable ConfigurationStore values for
     // the left-nav settings panels. Grows a section per sub-phase.
+    private static string PassiveJson(object value) => System.Text.Json.JsonSerializer.Serialize(value is AgOpenWeb.Models.Configuration.PassiveGuidanceConfig p?AgOpenWeb.Services.Passive.PassiveSettings.Sanitize(p):value,new System.Text.Json.JsonSerializerOptions {PropertyNamingPolicy=System.Text.Json.JsonNamingPolicy.CamelCase});
+
     public ConfigDto BuildConfig()
     {
         var v = _config.Vehicle;
@@ -783,7 +785,7 @@ public sealed class SceneProjector
             new TramConfigDto(g.TramPasses, g.TramDisplay, _config.Tram.StartPass + 1, _config.Tram.TramWidth),
             new MachineConfigDto(m.HydraulicLiftEnabled, m.RaiseTime, m.LookAhead, m.LowerTime, m.InvertRelay,
                 m.User1Value, m.User2Value, m.User3Value, m.User4Value, pins),
-            BuildDisplay(), BuildAutoSteer());
+            BuildDisplay(), BuildAutoSteer(), PassiveJson(t.Passive));
     }
 
     // AutoSteer config tab — projects the full 9-tab AutoSteer panel. The algorithm /
@@ -860,6 +862,7 @@ public sealed class SceneProjector
     {
         var v = _config.Vehicle; var c = _config.Connections; var a = _config.Ahrs;
         long h = 17;
+        h=h*31+PassiveJson(_config.Tool.Passive).GetHashCode();
         h = h * 31 + v.Name.GetHashCode();
         h = h * 31 + (int)v.Type * 31 + v.HitchType;
         h = h * 31 + (c.IsDualGps ? 1 : 0) * 7 + (c.AutoDualFix ? 1 : 0) * 11

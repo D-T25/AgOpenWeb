@@ -83,3 +83,8 @@ To help translate the UI, no code is needed: join in on [Weblate](https://hosted
 ## License
 
 [GNU General Public License v3.0](LICENSE.md)
+
+
+## Experimental passive implement guidance
+
+Branch `feature/twol-passive-guidance` ports Twol's manual passive guidance to the shared backend and web UI. It adds a separate implement GPS input (UDP 19999), a Passive tab under Tool Configuration, and an independent tool-guidance request. Sections do not control passive engagement. Calibration and active implement actuation are not included, and U-turn planning is unchanged. See [setup, controls and validation notes](docs/TWOL_PASSIVE_GUIDANCE.md).

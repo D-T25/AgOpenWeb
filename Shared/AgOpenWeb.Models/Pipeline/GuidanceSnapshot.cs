@@ -27,6 +27,8 @@ namespace AgOpenWeb.Models.Pipeline;
 /// </summary>
 public record GuidanceSnapshot
 {
+    public AgOpenWeb.Models.Pipeline.PassiveGuidanceStatus Passive { get; init; } = new();
+
     // Active track
     public Track.Track? ActiveTrack { get; init; }
     public bool IsGuidanceActive { get; init; }
