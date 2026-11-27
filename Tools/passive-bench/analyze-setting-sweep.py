@@ -8,6 +8,12 @@ from statistics import mean
 root = Path(sys.argv[1])
 data = json.loads((root / 'results.json').read_text())
 runs, findings = data['runs'], data['findings']
+settings = json.loads((root / 'settings.json').read_text())
+# The narrative below interprets this published reference experiment. Never
+# attach its fixed numerical examples to a different seed/duration experiment.
+if settings['seeds'] != 3 or settings['durationS'] != 180 or len(runs) != 735:
+    raise SystemExit('The field guide requires the default 3-seed, 180-second, 735-run reference sweep. '
+                     'For other sweeps, use their generated interactive report and metrics.')
 comparisons = []
 for motion, preview in [('150', '0.5'), ('200', '1')]:
     for r in runs:

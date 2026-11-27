@@ -92,6 +92,9 @@ python3 Tools/passive-bench/analyze-setting-sweep.py setting-sweep-results
 
 The analyzer checks 42 equivalent Motion/Look-ahead pairs and, when present,
 mirrored curve RMS. It writes `FIELD-FINDINGS.md` and `analysis-checks.json`.
+Its narrative interprets the default 3-seed, 180-second reference experiment;
+it rejects different run counts/durations rather than attaching these numerical
+examples to another experiment. Other sweeps retain their own dynamic HTML and CSV.
 The Windows batch file reruns the primary sweep; it does not rerun these separate
 diagnostics. The guide distinguishes the main numerical passes from the retained
 mirror-suite acceptance failure and the unsolved noisy curve result.
