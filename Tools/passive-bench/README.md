@@ -59,3 +59,7 @@ The 16 checks cover default-off behavior, independent Tool GPS/request/tractor g
 ## Scope
 
 These tests exercise the shared backend and web interface. They do not launch a native Windows WebView2 shell, connect physical equipment, validate full implement footprints/headland coverage, or test active implement actuator steering. A Linux run cannot certify Windows-native operation. The downloadable Windows offline harness has been cross-compiled, not launched on Windows here.
+
+## Force-based draft tests
+
+For straight/curve draft forces, side slope, soil grip, hitch reaction and delayed/noisy GNSS, see [DRAFT-MODEL.md](DRAFT-MODEL.md) and [DRAFT-FINDINGS.md](DRAFT-FINDINGS.md). Run the new suite with `--draft`; its animated report is separate from the original kinematic/replay report.
