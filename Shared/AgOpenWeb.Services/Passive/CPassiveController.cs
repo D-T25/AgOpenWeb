@@ -21,10 +21,9 @@ namespace AgOpenWeb.Services.Passive
             CorrectionReason = "Waiting";
         }
 
-        public double Update(DateTime now, double error, double headingLateralSpeed,
-            bool hasHeading, double previewSeconds, double intervalSeconds,
-            double tracking, double heading, double acquire, double strength,
-            double maximumOffset, bool earlyCorrection, bool pathIsCurved = false)
+        public double Update(DateTime now, double error, double previewSeconds, double intervalSeconds,
+            double tracking, double motion, double acquire, double strength,
+            double maximumOffset, bool earlyCorrection)
         {
             if (!Finite(error)) { Reset(); return 0; }
             double dt = lastUpdate == DateTime.MinValue ? 0 : (now - lastUpdate).TotalSeconds;
@@ -52,11 +51,10 @@ namespace AgOpenWeb.Services.Passive
             // Adding correction still observes the hold. Removing an offset that is carrying
             // the tool through the line must not wait for that hold or the retry threshold.
             // Position-derived lateral motion also permits braking without a heading receiver.
-            double approachSpeed = !pathIsCurved && hasHeading && Finite(headingLateralSpeed)
-                ? Clamp(headingLateralSpeed, -0.5, 0.5) : Clamp(ErrorRate, -0.5, 0.5);
+            double approachSpeed = Clamp(ErrorRate, -0.5, 0.5);
             double releaseRate = 0.20 * Clamp(strength, 50, 200) / 100;
             double returnTime = Math.Abs(Offset) / releaseRate;
-            double brakeWindow = returnTime + Clamp(heading, 50, 200) / 100
+            double brakeWindow = returnTime + Clamp(motion, 50, 200) / 100
                 + Clamp(Finite(previewSeconds) ? previewSeconds : 0, 0, 2);
             bool approaching = FilteredError * approachSpeed < 0 && Math.Abs(approachSpeed) > 0.02;
             bool predictedCrossing = approaching
@@ -84,16 +82,12 @@ namespace AgOpenWeb.Services.Passive
             double trackingGain = Clamp(tracking, 50, 200) / 100;
             double acquireGain = 1 + (Clamp(acquire, 50, 200) / 100 - 1)
                 * Clamp((absoluteError - 0.10) / 0.40, 0, 1);
-            // Heading provides a lateral velocity term even with optional look-ahead disabled.
-            // A tool already approaching the line needs less correction; one moving away needs more.
-            // A heading projected onto one straight segment includes normal curve motion.
-            // On curves use the measured rate of error relative to the changing path instead.
-            double lateralSpeed = pathIsCurved ? Clamp(ErrorRate, -0.5, 0.5)
-                : hasHeading && Finite(headingLateralSpeed)
-                    ? Clamp(headingLateralSpeed, -0.5, 0.5) : 0;
-            double headingTerm = lateralSpeed * Clamp(heading, 50, 200) / 100;
+            // Body orientation is not direction of travel under side-draft. Damping and
+            // preview use the filtered change in GPS working-bar error on every path.
+            double lateralSpeed = Clamp(ErrorRate, -0.5, 0.5);
+            double motionTerm = lateralSpeed * Clamp(motion, 50, 200) / 100;
             double previewTerm = lateralSpeed * Clamp(Finite(previewSeconds) ? previewSeconds : 0, 0, 2);
-            double demand = FilteredError * trackingGain * acquireGain + headingTerm + previewTerm;
+            double demand = FilteredError * trackingGain * acquireGain + motionTerm + previewTerm;
             if (absoluteError < 0.02 && Math.Abs(lateralSpeed) < 0.01) demand = 0;
             double gain = Clamp(absoluteError, 0.2, 0.6);
             // Strength independently limits correction size and slew. Long holds no longer lose

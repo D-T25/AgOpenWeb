@@ -11,8 +11,12 @@ namespace AgOpenWeb.RemoteServer;
 public sealed class ControlAuthority
 {
     // No presence for this long (ms) while holding → deadman revoke. The client
-    // heartbeats at ~2 Hz, so 1.5 s tolerates a missed beat without nuisance loss.
+    // heartbeats at up to 4 Hz; the 1.5 s shutdown deadline remains unchanged.
     private const long DeadmanMs = 1500;
+
+    private readonly TimeProvider _clock;
+    public ControlAuthority(TimeProvider? clock = null) => _clock = clock ?? TimeProvider.System;
+    private double PresenceAgeMs => _clock.GetElapsedTime(_lastPresenceTicks).TotalMilliseconds;
 
     private readonly object _lock = new();
     private Guid? _holder;
@@ -38,7 +42,7 @@ public sealed class ControlAuthority
     public bool HoldsFresh(Guid conn)
     {
         lock (_lock)
-            return _holder == conn && (Environment.TickCount64 - _lastPresenceTicks) <= DeadmanMs;
+            return _holder == conn && PresenceAgeMs <= DeadmanMs;
     }
 
     /// <summary>Take control. Granted if free or already held by this connection;
@@ -51,7 +55,7 @@ public sealed class ControlAuthority
             if (_holder.HasValue && _holder != conn) return false;
             _holder = conn;
             _holderName = string.IsNullOrWhiteSpace(name) ? "Remote" : name.Trim();
-            _lastPresenceTicks = Environment.TickCount64;
+            _lastPresenceTicks = _clock.GetTimestamp();
             snap = new ControlStateDto(true, _holder.ToString()!, _holderName);
         }
         Changed?.Invoke(snap);
@@ -61,7 +65,20 @@ public sealed class ControlAuthority
     /// <summary>Heartbeat — keeps a hold alive (deadman reset). No-op for non-holders.</summary>
     public void Refresh(Guid conn)
     {
-        lock (_lock) { if (_holder == conn) _lastPresenceTicks = Environment.TickCount64; }
+        bool expired = false;
+        lock (_lock)
+        {
+            if (_holder != conn) return;
+            // A delayed pulse must not revive an already-expired hold just before
+            // the next sweep. The operator must reacquire; failsafe still runs.
+            if (PresenceAgeMs > DeadmanMs) { _holder = null; _holderName = ""; expired = true; }
+            else _lastPresenceTicks = _clock.GetTimestamp();
+        }
+        if (expired)
+        {
+            Revoked?.Invoke("presence lost (deadman)");
+            Changed?.Invoke(Snapshot());
+        }
     }
 
     /// <summary>Voluntary release. No failsafe (the holder chose to let go).</summary>
@@ -87,7 +104,7 @@ public sealed class ControlAuthority
         bool revoked;
         lock (_lock)
         {
-            revoked = _holder.HasValue && (Environment.TickCount64 - _lastPresenceTicks) > DeadmanMs;
+            revoked = _holder.HasValue && PresenceAgeMs > DeadmanMs;
             if (revoked) { _holder = null; _holderName = ""; }
         }
         if (revoked)

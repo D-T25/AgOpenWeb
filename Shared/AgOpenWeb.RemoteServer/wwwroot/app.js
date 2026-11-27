@@ -55,6 +55,7 @@ const RENDER_DELAY = 130; // ms
 // frame and resume the rest next frame (progress stored on batch.off), so a big snapshot
 // paints over a handful of frames with no visible hitch. ~40k rects ≈ 1-2 ms/frame.
 const COV_DRAIN_BUDGET = 40000;
+const COV_DRAIN_MS = 6; // keep coverage batches from monopolising the operator UI
 // Max time we'll extrapolate past the newest pose when the buffer underruns (WiFi spike /
 // dropped pose) before settling to a hold — bridges spikes without flying off on a real
 // dropout. At field speed 200 ms is well under a pose-pair's worth of travel.
@@ -3858,7 +3859,15 @@ function claimSeatIfFree() {
 }
 // Heartbeat keeps our hold alive while we control; a lapse trips the host deadman
 // (disengage autosteer + sections).
-setInterval(() => { if (iHoldControl) transport.send('control.presence'); }, 500);
+// Both callbacks run on the real UI thread. Pulse before expensive painting too,
+// without a worker that could keep a frozen operator page artificially alive.
+let lastPresenceSent = -Infinity;
+function pulseControlPresence(now = performance.now()) {
+  if (!iHoldControl) { lastPresenceSent = -Infinity; return; }
+  if (now - lastPresenceSent < 250) return;
+  transport.send('control.presence'); lastPresenceSent = now;
+}
+setInterval(pulseControlPresence, 250);
 updateControlUi();
 
 // Right-nav toolbar actuation (Phase 3b). Each button sends its Tier-2 command,
@@ -5968,13 +5977,17 @@ function drawCoverageSk(canvas) {
     // GPU render target: draw only the aged pending NEW cells onto it, then snapshot (a GPU
     // texture COW — cheap). No whole-texture upload, so no regular per-rebuild stutter.
     if (cov.pending.length && cov.pending[0].t <= cutoff) {
+      // Drop our cached snapshot before writing the same render target; retaining it
+      // can force a copy-on-write of the entire field texture for a tiny live delta.
+      if (cov.skImg) { cov.skImg.delete(); cov.skImg = null; }
       const sk = cov.surface.getCanvas(), paint = cov.covPaint, H = cov.height;
       let lastRgb = -1, drained = 0, budget = COV_DRAIN_BUDGET;
+      const deadline = performance.now() + COV_DRAIN_MS;
       for (const batch of cov.pending) {
         if (batch.t > cutoff) break;
         const c = batch.cells;
         let i = batch.off || 0; // resume a batch we ran out of budget on last frame
-        for (; i + 2 < c.length && budget > 0; i += 3) {
+        for (; i + 2 < c.length && budget > 0 && ((budget & 63) !== 0 || performance.now() < deadline); i += 3) {
           const x = c[i], y = c[i + 1], v = c[i + 2] >>> 0; // (a<<24)|(r<<16)|(g<<8)|b
           if (v !== lastRgb) { paint.setColor(CK.Color((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF, ((v >>> 24) & 0xFF) / 255)); lastRgb = v; covEdgeRgb = v & 0xFFFFFF; }
           sk.drawRect(CK.XYWHRect(x, H - 1 - y, 1, 1), paint); // flip: high northing at top
@@ -5998,11 +6011,12 @@ function drawCoverageSk(canvas) {
     if (cov.pending.length && cov.pending[0].t <= cutoff) {
       const H = cov.height, cctx = cov.cctx;
       let lastRgb = -1, drained = 0, budget = COV_DRAIN_BUDGET;
+      const deadline = performance.now() + COV_DRAIN_MS;
       for (const batch of cov.pending) {
         if (batch.t > cutoff) break;
         const c = batch.cells;
         let i = batch.off || 0; // resume a batch we ran out of budget on last frame
-        for (; i + 2 < c.length && budget > 0; i += 3) {
+        for (; i + 2 < c.length && budget > 0 && ((budget & 63) !== 0 || performance.now() < deadline); i += 3) {
           const x = c[i], y = c[i + 1], v = c[i + 2] >>> 0; // (a<<24)|(r<<16)|(g<<8)|b
           if (v !== lastRgb) {
             cctx.fillStyle = 'rgba(' + ((v >> 16) & 0xFF) + ',' + ((v >> 8) & 0xFF) + ',' + (v & 0xFF) + ',' + (((v >>> 24) & 0xFF) / 255) + ')';
@@ -6222,6 +6236,7 @@ function renderSkia(canvas, rp) {
 function skFrame() {
   // Client render rate over a ~500 ms window (shown on the GPS-detail card).
   const _now = performance.now();
+  pulseControlPresence(_now);
   if (_fpsT0 === 0) _fpsT0 = _now;
   else { _fpsFrames++; const dt = _now - _fpsT0; if (dt >= 500) { fps = _fpsFrames * 1000 / dt; _fpsFrames = 0; _fpsT0 = _now; } }
   const rp = updateCamera(); // follow mode + rotation + perspM, once per frame

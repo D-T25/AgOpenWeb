@@ -216,4 +216,35 @@ public class PassiveGuidanceTests
         Assert.That(intents.Drain().ToolGpsSimulation,Is.Null);
     }
 
+    [TestCase(15)] [TestCase(-15)] [TestCase(90)]
+    public void ToolBodyYawCannotInventSidewaysMotion(double bodyDegrees)
+    {
+        var baseline=new TrackGuidanceService();var yawed=new TrackGuidanceService();
+        for(int i=0;i<100;i++)
+        {
+            var a=Input(i*.1,error:.12);var b=Input(i*.1,error:.12);var r=b.Passive!;
+            b.Passive=new(){Settings=r.Settings,Now=r.Now,Requested=true,HasLocalPlane=true,ToolEast=r.ToolEast,ToolNorth=r.ToolNorth,
+                Width=r.Width,Context=r.Context,Fix=r.Fix! with {DualHeading=(bodyDegrees+360)%360}};
+            var aa=baseline.CalculateGuidance(a);var bb=yawed.CalculateGuidance(b);
+            Assert.That(bb.Passive.Offset,Is.EqualTo(aa.Passive.Offset).Within(1e-10),"Orientation must not substitute for ground velocity.");
+        }
+    }
+    [Test]
+    public void MotionSensitivityRespondsToGpsErrorChangeWithoutHeading()
+    {
+        double Run(double sensitivity)
+        {
+            var service=new TrackGuidanceService();TrackGuidanceOutput result=null!;
+            for(int i=0;i<=45;i++)
+            {
+                var input=Input(i*.1,error:.12+i*.004);var r=input.Passive!;r.Settings.Heading=sensitivity;
+                input.Passive=new(){Settings=r.Settings,Now=r.Now,Requested=true,HasLocalPlane=true,ToolEast=r.ToolEast,ToolNorth=i*.2,
+                    Width=r.Width,Context=r.Context,Fix=r.Fix! with {DualHeading=double.NaN,ImuHeading=double.NaN}};
+                result=service.CalculateGuidance(input);
+            }
+            return result.Passive.Offset;
+        }
+        Assert.That(Run(200),Is.LessThan(Run(50)),"Moving away needs stronger damping even without an orientation sensor.");
+    }
+
 }

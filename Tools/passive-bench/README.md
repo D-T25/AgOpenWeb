@@ -27,7 +27,7 @@ dotnet build Simulators/AgOpenWeb.PassiveHarness -m:1 -nr:false -p:DesktopOnly=t
 dotnet Simulators/AgOpenWeb.PassiveHarness/bin/Debug/net10.0/AgOpenWeb.PassiveHarness.dll --output passive-results
 ```
 
-The synthetic side-draft term deliberately allows trailer body heading to differ from its direction of travel. It is a simplified disturbance, **not a validated soil model**. It exposes how the heading damping reacts to that mismatch. Geometry, reverse steering forces, tyre slip, GNSS correlation, roll dynamics and hardware latency need further validation before predicting field accuracy. Reverse acquisition is covered by the existing guidance tests; this harness does not certify passive or active corner backing.
+The synthetic side-draft term deliberately allows trailer body heading to differ from its direction of travel. It is a simplified disturbance, **not a validated soil model**. It tests whether orientation can contaminate lateral-motion damping; the current controller derives that motion from GPS path-error changes. Geometry, reverse steering forces, tyre slip, GNSS correlation, roll dynamics and hardware latency need further validation before predicting field accuracy. Reverse acquisition is covered by the existing guidance tests; this harness does not certify passive or active corner backing.
 
 ## 2. Live simulator / web / UDP harness
 
@@ -54,7 +54,7 @@ node browser.cjs --head ../../Platforms/AgOpenWeb.Desktop/bin/Debug/net10.0/AgOp
 
 `--dotnet PATH` selects a runtime for a DLL; `--browser PATH` selects an already installed Chromium executable. All commands go to the locally launched host, and the only synthetic receiver datagrams go to **127.0.0.1:19999**. Tests use the built-in tractor simulator. Do not run alongside a field session.
 
-The 14 checks cover default-off behavior, independent Tool GPS/request/tractor gates, fixed/trailing engagement, a real nonzero correction, section controls, passive disarm, tool-source toggling, real implement PAOGI over UDP with simulator Tool GPS off, stale-data shutdown, observer rejection and authority-loss reset. Results are saved as HTML/JSON beside `host.log` and `transitions.json`. State transitions distinguish operator/control resets from section changes. The host is stopped on completion; its isolated temporary data directory is retained for diagnosis and printed in JSON.
+The 16 checks cover default-off behavior, independent Tool GPS/request/tractor gates, fixed/trailing engagement, a real nonzero correction, section controls, passive disarm, tool-source toggling, real implement PAOGI over UDP with simulator Tool GPS off, stale-data shutdown, observer rejection and authority-loss reset. Results are saved as HTML/JSON beside `host.log` and `transitions.json`. State transitions distinguish operator/control resets from section changes. The extra checks exercise 12 live section changes during trailing correction and deliberately freeze the operator UI for 2.1 seconds to verify deadman shutdown. `node client-scheduling.cjs` checks that GPU and 2D coverage queues yield without dropping or duplicating cells. The host is stopped on completion; its isolated temporary data directory is retained for diagnosis and printed in JSON.
 
 ## Scope
 

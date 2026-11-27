@@ -61,9 +61,8 @@ public sealed class PassiveGuidanceService
         double preview=CPassiveCurve.Curvature(points,tractor.Index,input.Track.IsClosed,true,
             tractor.Station+(input.IsHeadingSameWay!=input.IsReverse?1:-1)*Math.Clamp(geometry.Length*0.5+Math.Abs(input.AvgSpeed)/3.6,2,15),2);
         double limit=CPassiveCurve.Limit(s.StraightLimit,s.CurveLimit,Math.Max(Math.Abs(toolCurve),Math.Max(Math.Abs(local),Math.Abs(preview))));
-        double lateralSpeed=hasHeading?Math.Sin(CToolHeadingResolver.Difference(body,tool.Heading*180/Math.PI)*Math.PI/180)*heading.SpeedMetersPerSecond*(input.IsReverse?-1:1):0;
-        double correction=controller.Update(r.Now,tool.Error,lateralSpeed,hasHeading,s.LookAhead,s.Interval,
-            (int)s.Tracking,(int)s.Heading,(int)s.Acquire,(int)s.Strength,limit,s.EarlyRetry,Math.Abs(toolCurve)>0.001);
+        double correction=controller.Update(r.Now,tool.Error,s.LookAhead,s.Interval,
+            s.Tracking,s.Heading,s.Acquire,s.Strength,limit,s.EarlyRetry);
         // AgOpenWeb has no legacy curve gain: unchecked geometry means feedback-only.
         double curve=s.UseGeometry?geometry.Offset(0.5*local+0.5*preview)*Math.Clamp(s.CurveResponse,0,300)/100:0;
         if(!double.IsFinite(curve))curve=0;
@@ -76,7 +75,7 @@ public sealed class PassiveGuidanceService
         double goalHeading=goal.Index>=0?goal.Heading:tractor.Heading;
         output.GoalPoint=new Vec2(output.GoalPoint.Easting+Math.Cos(goalHeading)*applied,
             output.GoalPoint.Northing-Math.Sin(goalHeading)*applied);
-        return new(r.Requested,true,error,applied,heading.Source,Math.Abs(correction+curveAverage)>=limit-1e-6?"Offset limited":controller.CorrectionReason,east,north,true);
+        return new(r.Requested,true,error,applied,heading.Source,Math.Abs(correction+curveAverage)>=limit-1e-6?"Offset limit reached":controller.CorrectionReason,east,north,true);
     }
     private static (int Index,double Error,double Heading,double Station) Project(IList<Vec3> p,double e,double n,bool closed)
     {

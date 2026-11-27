@@ -58,12 +58,12 @@ public static class Contracts
             for(int i=0;i<heads.Length;i++){var t=Program.Epoch.AddSeconds(i*.1);ok&=r.Resolve(t,0,i*.2,true,t,2,false,true,heads[i],t,double.NaN,t,double.NaN,t,0,out double h)&&Math.Abs(CToolHeadingResolver.Difference(h,heads[i]))<1e-9;}return ok;},"359°, 0°, 1° heading samples preserve direction.");
         Check("Hold escapes a stalled correction",()=>{
             var c=new CPassiveController();bool retry=false;
-            for(int i=0;i<=100;i++){c.Update(Program.Epoch.AddSeconds(i*.1),.6,0,true,0,8,100,100,100,100,2,true,false);retry|=c.CorrectionReason=="Not improving";}
+            for(int i=0;i<=100;i++){c.Update(Program.Epoch.AddSeconds(i*.1),.6,0,8,100,100,100,100,2,true);retry|=c.CorrectionReason=="Not improving";}
             return retry;
         },"Early retry must occur during the 8-second hold when error does not improve.");
         Check("Early retry can be disabled",()=>{
             var c=new CPassiveController();bool retry=false;
-            for(int i=0;i<=100;i++){c.Update(Program.Epoch.AddSeconds(i*.1),.6,0,true,0,8,100,100,100,100,2,false,false);retry|=c.CorrectionReason=="Not improving";}
+            for(int i=0;i<=100;i++){c.Update(Program.Epoch.AddSeconds(i*.1),.6,0,8,100,100,100,100,2,false);retry|=c.CorrectionReason=="Not improving";}
             return !retry;
         },"Manual hold preference is respected.");
         foreach(double degrees in new[]{0d,45,180,270}) Check("Antenna transform / "+degrees.ToString(CultureInfo.InvariantCulture)+" degrees",()=>{

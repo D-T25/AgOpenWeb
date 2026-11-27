@@ -1,8 +1,20 @@
-# First harness findings — 2026-11-27
+# Passive guidance harness findings — 2026-11-27
 
-Production code under test: `eb796df61d5db0101ed2f4271fac849c01233550`, branch `feature/twol-passive-guidance`. Harness development does not change production guidance.
+Original production baseline: `eb796df61d5db0101ed2f4271fac849c01233550`, branch `feature/twol-passive-guidance`. Harness development does not change production guidance.
 
-## Offline coupled model
+## Current motion feedback update
+
+All **74/74** coupled model and replay checks now pass with the same acceptance thresholds. Damping, braking and preview use the filtered rate of change of the GPS working-bar path error on both straight and curved paths. Body heading continues to transform antenna measurements and orient the implement.
+
+Standard held-correction straight side-draft cases fall from about 20.3 cm RMS to **0.58 cm** RMS; the noisy case is **0.28 cm**. Continuous correction remains about **18.7 cm RMS**, so passing the original 20 cm acceptance is not a claim of inch-level accuracy for every setting. S-curve/turn entry results remain within their original limits. The saturated long-trailer stress case remains physically constrained by its 1 m offset cap.
+
+Coverage painting now yields within a 6 ms rasterization budget, and the GPU path releases its cached snapshot before modifying the same render target. The real UI thread shares 250 ms rate-limited presence pulses between its timer and frame entry. The 1.5-second server deadline is unchanged. Expired holds cannot be revived by a late pulse. Deterministic tests verify both render paths preserve every cell and verify all authority expiry/disconnect cases. The live harness adds 12 section changes during trailing correction and a deliberate 2.1-second UI freeze.
+
+Three consecutive live runs each pass **16/16** checks, including live section updates and frozen-page shutdown. Maximum recorded pre-freeze heartbeat gaps were **706, 683 and 917 ms** against the unchanged 1,500 ms deadline. These are observed bench runs, not a guarantee for every device or network.
+
+See the latest browser report and repeat-run JSONs for control-stress outcomes. The earlier traces remain below and in report history; these tests cannot establish every possible scheduling/network cause of a drop.
+
+## Original offline coupled model (before motion feedback fix)
 
 **69 of 74 checks pass. Five declared tracking acceptance checks fail.** All reset/bounds/receiver/hold/geometry contract checks pass. Twenty-one paired driving scenarios produce 42 trajectories and 63,000 samples.
 
@@ -14,7 +26,7 @@ Production code under test: `eb796df61d5db0101ed2f4271fac849c01233550`, branch `
 
 Acceptance limits were retained throughout: ≤20 cm straight or ≤30 cm curve and at least 30% improvement over baseline. No thresholds were relaxed to make this report pass.
 
-## Live simulator / web / UDP
+## Original live simulator / web / UDP
 
 One complete isolated run passes all **14 checks**: independent controls, fixed/trailing engagement, nonzero correction, section independence, request/source disarm, real loopback implement PAOGI and stale-fix shutdown, observer rejection and authority-loss reset. Subsequent runs expose an intermittent authority-loss problem; see the final browser report and archived retries rather than treating the single passing run as proof of stability.
 

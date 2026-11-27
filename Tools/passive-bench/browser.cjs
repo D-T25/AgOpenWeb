@@ -8,7 +8,7 @@ const dgram = require('node:dgram');
 const options = Object.fromEntries(process.argv.slice(2).reduce((a,v,i,all)=>{if(v.startsWith('--'))a.push([v.slice(2),all[i+1]]);return a},[]));
 if(!options.head){console.error('Usage: node browser.cjs --head <AgOpenWeb.Desktop.exe or .dll> [--dotnet <dotnet>] [--output <folder>] [--browser <chromium>]');process.exit(2)}
 const output=path.resolve(options.output||'passive-browser-results');fs.mkdirSync(output,{recursive:true});
-const checks=[],errors=[];let host,browser,udp,operator;let log;
+const checks=[],errors=[],heartbeatTimes=[];let heartbeatMaxBeforeFreeze=0;let host,browser,udp,operator;let log;
 const data=fs.mkdtempSync(path.join(os.tmpdir(),'agopenweb-passive-bench-'));
 async function check(name,test){try{const detail=await test();checks.push({name,pass:true,detail:detail||'Observed in live host telemetry.'});console.log('PASS',name)}catch(e){checks.push({name,pass:false,detail:e.message});process.exitCode=1;if(name==='Section controls are independent')return false;throw e}}
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -22,7 +22,7 @@ async function portOpen(){try{await fetch('http://127.0.0.1:5174',{signal:AbortS
  host.on('error',e=>errors.push(e.message));
  const start=Date.now();while(!await portOpen()){if(Date.now()-start>30000||host.exitCode!==null)throw Error('Isolated backend did not start. See host.log.');await delay(100)}
  browser=await chromium.launch({headless:true,...(options.browser?{executablePath:path.resolve(options.browser)}:{}),args:['--no-sandbox','--disable-dev-shm-usage']});
- const page=await browser.newPage({viewport:{width:1280,height:800}});operator=page;page.on('pageerror',e=>errors.push(e.message));
+ const page=await browser.newPage({viewport:{width:1280,height:800}});operator=page;page.on('websocket',ws=>ws.on('framesent',e=>{if(e.payload==='control.presence')heartbeatTimes.push(Date.now())}));page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:5174');await page.waitForFunction(()=>typeof tick!=='undefined'&&tick&&typeof statusBar!=='undefined'&&statusBar&&iHoldControl,{timeout:30000});
  await page.evaluate(()=>{window.benchTransitions=[];let previous='';setInterval(()=>{if(!tick)return;const state={requested:tick.passive.requested,engaged:tick.passive.engaged,simulatedGps:tick.passive.simulatedGps,reason:tick.passive.reason,control:iHoldControl,autoSteer:tick.op.autoSteer,enabled:config?.passive?.enabled};const json=JSON.stringify(state);if(json!==previous){benchTransitions.push({time:performance.now(),...state});previous=json}},100)});
  const wait=async predicate=>page.waitForFunction(predicate,{},{timeout:20000});
@@ -47,6 +47,13 @@ async function portOpen(){try{await fetch('http://127.0.0.1:5174',{signal:AbortS
    await send('config.set|tool.offset:0');
    return JSON.stringify(p);
  });
+ await check('Live section changes retain operator control',async()=>{
+   for(let cycle=0;cycle<3;cycle++)for(const cmd of ['section.master','section.master','section.manual','section.manual']){
+     await send(cmd);const state=await page.evaluate(()=>({p:tick.passive,control:iHoldControl}));
+     if(!state.p.requested||!state.p.engaged||!state.control)throw Error('Authority changed during '+cmd+': '+JSON.stringify(state));
+   }
+   return '12 live section updates while trailing guidance is correcting; no request or authority reset.';
+ });
  await check('Passive button clears correction',async()=>{await send('passive.set|0');await wait(()=>!tick.passive.requested&&!tick.passive.engaged&&tick.passive.offset===0);await send('passive.set|1');await wait(()=>tick.passive.engaged)});
  await check('Tool GPS off removes simulated fixes',async()=>{await tool();await wait(()=>!tick.passive.simulatedGps&&!tick.passive.engaged&&tick.passive.offset===0)});
  await check('Real implement UDP input works without Tool GPS',async()=>{
@@ -67,8 +74,16 @@ async function portOpen(){try{await fetch('http://127.0.0.1:5174',{signal:AbortS
    finally{await observer.close()}
  });
  await check('Tractor off resets passive',async()=>{await send('autosteer.toggle');await wait(()=>!tick.passive.engaged&&tick.passive.offset===0)});
+ await check('Frozen operator page still trips the deadman',async()=>{
+   heartbeatMaxBeforeFreeze=Math.max(0,...heartbeatTimes.slice(1).map((t,i)=>t-heartbeatTimes[i]));
+   await send('autosteer.toggle');await send('passive.set|1');await wait(()=>tick.passive.engaged);
+   await page.evaluate(()=>{const until=performance.now()+2100;while(performance.now()<until){}});
+   await wait(()=>!tick.passive.requested&&!tick.passive.engaged&&!tick.op.autoSteer&&tick.passive.offset===0);
+   await wait(()=>iHoldControl);
+   return 'A deliberate 2.1 s UI stall disarmed steering; normal pre-stall max heartbeat gap '+heartbeatMaxBeforeFreeze+' ms.';
+ });
  await check('Losing operator authority clears passive request',async()=>{
-   await send('autosteer.toggle');await wait(()=>tick.passive.engaged);
+   await send('autosteer.toggle');await send('passive.set|1');await wait(()=>tick.passive.engaged);
    const observer=await browser.newPage();await observer.goto('http://127.0.0.1:5174');await observer.waitForFunction(()=>typeof tick!=='undefined'&&tick);
    fs.writeFileSync(path.join(output,'transitions.json'),JSON.stringify(await page.evaluate(()=>window.benchTransitions),null,2));await page.close();await observer.waitForFunction(()=>!tick.passive.requested&&!tick.passive.engaged&&tick.passive.offset===0,{},{timeout:20000});await observer.close();
  });
@@ -93,7 +108,7 @@ async function portOpen(){try{await fetch('http://127.0.0.1:5174',{signal:AbortS
  if(udp)udp.close();if(browser)await browser.close();
  if(host&&host.exitCode===null){host.kill();await Promise.race([new Promise(r=>host.once('exit',r)),delay(3000)]);if(host.exitCode===null)host.kill('SIGKILL')}
  if(log!==undefined)fs.closeSync(log);
- const report={plannedChecks:14,notRun:Math.max(0,14-checks.length),title:'AgOpenWeb live simulator integration harness',createdUtc:new Date().toISOString(),dataDirectory:data,checks,errors};
+ const report={plannedChecks:16,notRun:Math.max(0,16-checks.length),heartbeatMaxBeforeFreeze,title:'AgOpenWeb live simulator integration harness',createdUtc:new Date().toISOString(),dataDirectory:data,checks,errors};
  fs.writeFileSync(path.join(output,'browser-results.json'),JSON.stringify(report,null,2));
  const escape=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
  fs.writeFileSync(path.join(output,'browser-report.html'),`<!doctype html><meta charset="utf-8"><title>Simulator integration results</title><style>body{font:16px system-ui;max-width:1000px;margin:30px auto;padding:20px}td{padding:10px;border-bottom:1px solid #ddd}.pass{color:green}.fail{color:#b22}</style><h1>${report.title}</h1><p>${checks.filter(c=>c.pass).length} passed, ${checks.filter(c=>!c.pass).length} failed, ${report.notRun} not run. Isolated test profile; actual shared desktop backend and web UI.</p><table>${checks.map(c=>`<tr><td class="${c.pass?'pass':'fail'}">${c.pass?'PASS':'FAIL'}</td><td>${escape(c.name)}</td><td>${escape(c.detail)}</td></tr>`).join('')}</table><p>Windows native shell and hardware field behaviour are not tested by this harness.</p>`);

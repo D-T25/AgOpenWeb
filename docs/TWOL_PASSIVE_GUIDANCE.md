@@ -18,7 +18,7 @@ The cyan map marker shows the measured working point while passive measurement i
 | Control | Effect |
 |---|---|
 | Tracking Sensitivity | Response to implement cross-track error; 50–200. |
-| Heading Sensitivity | Lateral-motion damping/feed-forward; 50–200. |
+| Motion Sensitivity | Damping/preview from changes in GPS working-bar error, independent of body yaw; 50–200. Saved under the existing `Heading` profile key. |
 | Acquire Sensitivity | Extra correction away from the line; does not change engagement thresholds. |
 | Curve Response | One 0–300% geometry multiplier; 100% uses measured dimensions. No second curve-gain/sensitivity control. |
 | Correction Interval | 0–25 seconds; default 4, zero means continuous. |
@@ -63,6 +63,10 @@ python3 Tools/i18n-extract.py --check
 
 This is an experimental port for simulator/bench validation. Host compilation and automated tests do not establish field performance, and iOS/Android native packaging requires their platform toolchains.
 
-Validated for this port: **167 model tests, 1,569 service tests and 319 ViewModel tests passed** (2 service tests skipped). The service count includes 20 new passive tests. The Desktop host builds successfully. JavaScript syntax and translation extraction checks pass. A Chromium session against the running host verified config round-trip, arm/disarm, observer command rejection (including the generic-config bypass), authority-loss disarm, listener lifecycle on UDP 19999, and a compact panel that fits the tested 1280×800 viewport. No browser script errors occurred. These checks do not replace a coupled tractor/implement field test or native mobile packaging.
+Validation covers 167 model tests, 1,578 service tests, 319 ViewModel tests and four remote-authority tests (two service tests skipped), plus deterministic client scheduling tests and the coupled driving/live browser harnesses. The live checks cover fixed/trailing engagement, real loopback implement UDP, section independence, observer rejection, disconnection and frozen-page shutdown. These results do not establish field performance or native Windows/mobile execution.
 
-Simulator-toggle validation: fixed and trailing implement engagement was tested against the running desktop backend in Chromium. Turning Tool GPS off returns to the real receiver and disengages without a valid real fix. Automated suites pass 2,060 tests (two skipped), including antenna geometry and independent simulator intents. Windows native launch remains untested on this Linux build host.
+## Motion feedback and operator responsiveness update
+
+Orientation (dual GNSS, GNSS-referenced IMU, or movement-derived heading) positions the antenna and working bar. Damping, approach braking and look-ahead use the filtered rate of change of the GPS working-bar path error. A sideways-pointing tool travelling parallel to the line no longer invents lateral velocity. The existing heading slider is now labelled **Motion Sensitivity**, and old profile values are retained. Straight and curve offset limits remain manual; saturation reads **Offset limit reached**.
+
+The browser slices coverage rasterization into 6 ms budgets (plus its existing cell cap), releases cached GPU snapshots before writing, and pulses operator presence from the UI timer and before rendering. The pulse rate is limited to once per 250 ms. The server's **1.5-second deadline is unchanged**. No worker renews a frozen page. A late heartbeat cannot revive an expired hold before the next sweep. New deterministic authority and renderer tests, plus a deliberate 2.1-second page freeze in the live bench, verify the shutdown path.
