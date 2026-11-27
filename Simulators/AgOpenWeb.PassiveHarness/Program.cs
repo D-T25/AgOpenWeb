@@ -17,6 +17,7 @@ public static class Program
     internal static readonly DateTime Epoch = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     public static int Main(string[] args)
     {
+        if (args.Contains("--settings-sweep")) return SettingSweepSuite.Run(args);
         if (args.Contains("--draft")) return DraftSuite.Run(args);
         string output = args.Length == 2 && args[0] == "--output" ? args[1] : "passive-harness-results";
         Directory.CreateDirectory(output);

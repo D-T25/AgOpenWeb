@@ -63,3 +63,13 @@ These tests exercise the shared backend and web interface. They do not launch a 
 ## Force-based draft tests
 
 For straight/curve draft forces, side slope, soil grip, hitch reaction and delayed/noisy GNSS, see [DRAFT-MODEL.md](DRAFT-MODEL.md) and [DRAFT-FINDINGS.md](DRAFT-FINDINGS.md). Run the new suite with `--draft`; its animated report is separate from the original kinematic/replay report.
+
+## One-setting-at-a-time field adjustment study
+
+Run the force-based harness with `--settings-sweep` to compare all 11 passive
+adjustments on flat straight rows with steady/changing draft and on both curve
+directions. See [SETTING-SWEEP.md](SETTING-SWEEP.md) for baseline values, methods,
+metrics and limitations. This does not change the production controller or add
+automatic calibration. `analyze-setting-sweep.py RESULT-DIRECTORY` audits the
+Motion/Look-ahead overlap and writes a field guide; it also reads optional
+`Fine-Step-Checks` and `Mirror-Checks` results when present.

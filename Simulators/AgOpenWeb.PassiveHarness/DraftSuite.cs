@@ -108,9 +108,9 @@ public static class DraftSuite
         if(c.Cases.Select(x=>x.Name).Distinct().Count()!=c.Cases.Count||c.Cases.Any(x=>string.IsNullOrWhiteSpace(x.Name)))throw new ArgumentException("Case names must be nonempty and unique.");
         foreach(var x in c.Cases){var p=x.Plant??new();var s=x.Sensors??new();
             if(new[]{p.MassKg,p.DrawbarM,p.WidthM,p.DepthM,p.CorneringStiffnessNPerRad,p.SteeringLagS,p.TractorMassKg,p.TractorCorneringStiffnessNPerRad,p.TractorYawDampingNms,s.ImplementHz}.Any(v=>!double.IsFinite(v)||v<=0)
-                ||new[]{p.HitchM,p.WorkingBarM,p.Asymmetry,p.LongitudinalDraftN,p.SlopeDegrees,p.HitchPlayM,p.Friction,s.PositionSigmaM,s.ImplementDelayS,s.TractorDelayS,s.HeadingSigmaDegrees,s.RollSigmaDegrees,s.SlowBiasM,s.ImuDriftDegPerSec,x.SpeedKph,x.OffsetLimitM,x.ProfileDrawbarScale,x.RadiusM,x.IntervalS}.Any(v=>!double.IsFinite(v))
+                ||new[]{p.HitchM,p.WorkingBarM,p.Asymmetry,p.LongitudinalDraftN,p.SlopeDegrees,p.HitchPlayM,p.Friction,s.PositionSigmaM,s.ImplementDelayS,s.TractorDelayS,s.HeadingSigmaDegrees,s.RollSigmaDegrees,s.SlowBiasM,s.ImuDriftDegPerSec,x.SpeedKph,x.OffsetLimitM,x.ProfileDrawbarScale,x.RadiusM,x.IntervalS,x.InitialErrorM}.Any(v=>!double.IsFinite(v))
                 ||p.MassKg<100||p.MassKg>20000||p.WidthM<.5||p.WidthM>30||p.DrawbarM<.5||p.DrawbarM>20||Math.Abs(p.HitchM)>5||p.WorkingBarM<0||p.WorkingBarM>5||Math.Abs(p.Asymmetry)>.15||p.LongitudinalDraftN>250000||s.RollSigmaDegrees<0||s.RollSigmaDegrees>5||s.SlowBiasM<0||s.SlowBiasM>.2||Math.Abs(s.ImuDriftDegPerSec)>.1||s.PositionSigmaM>.2||s.HeadingSigmaDegrees>5||p.Friction<=0||p.Friction>1||Math.Abs(p.SlopeDegrees)>12||p.HitchPlayM<0||p.HitchPlayM>.1||p.LongitudinalDraftN<0||s.PositionSigmaM<0||s.HeadingSigmaDegrees<0||s.ImplementDelayS<0||s.ImplementDelayS>1||s.TractorDelayS<0||s.TractorDelayS>1||s.ImplementHz>10||x.SpeedKph<3||x.SpeedKph>15||x.OffsetLimitM<.1||x.OffsetLimitM>3||x.ProfileDrawbarScale<.5||x.ProfileDrawbarScale>1.5||x.IntervalS<0||x.IntervalS>25
-                ||!new[]{"straight","circle","s","entry"}.Contains(x.Shape)||!new[]{"uniform","patches","rolling","reversal"}.Contains(x.Terrain)||!new[]{"dual","imu","position"}.Contains(s.Heading)||(x.Shape is "circle" or "entry")&&Math.Abs(x.RadiusM)<15)
+                ||!new[]{"straight","circle","s","entry"}.Contains(x.Shape)||!new[]{"uniform","patches","rolling","reversal","draft-reversal","draft-patches"}.Contains(x.Terrain)||!new[]{"dual","imu","position"}.Contains(s.Heading)||(x.Shape is "circle" or "entry")&&Math.Abs(x.RadiusM)<15)
                 throw new ArgumentException("Invalid physical/sensor parameters in "+x.Name);
         }
     }
@@ -137,9 +137,15 @@ public static class DraftSuite
     public static DraftRun Drive(DraftCase c,int seed,bool enabled,double duration,double physicsDt)
     {
         var p=c.Plant!;var sensor=c.Sensors!;var random=new Random(seed*17041);double Noise()=>Math.Sqrt(-2*Math.Log(Math.Max(1e-12,random.NextDouble())))*Math.Cos(2*Math.PI*random.NextDouble());
-        var plant=new DraftPlant(p,c.SpeedKph/3.6,c.Shape=="entry"?-40:0);var points=ReferencePath(c);
+        var plant=new DraftPlant(p,c.SpeedKph/3.6,c.Shape=="entry"?-40:0){E=c.InitialErrorM};var points=ReferencePath(c);
         var track=c.Shape=="straight"?Track.FromABLine(c.Name,points[0],points[1]):Track.FromCurve(c.Name,points,c.Shape=="circle");
-        var settings=new AgOpenWeb.Models.Configuration.PassiveGuidanceConfig{Enabled=enabled,UseGeometry=c.Geometry,Interval=c.IntervalS,StraightLimit=c.OffsetLimitM,CurveLimit=c.OffsetLimitM,AntennaToWorkingPoint=p.WorkingBarM,AntennaHeight=2};
+        // A private copy prevents a sweep case changing another case's settings.
+        var settings=c.Controller is null
+            ?new AgOpenWeb.Models.Configuration.PassiveGuidanceConfig{UseGeometry=c.Geometry,Interval=c.IntervalS,StraightLimit=c.OffsetLimitM,CurveLimit=c.OffsetLimitM}
+            :JsonSerializer.Deserialize<AgOpenWeb.Models.Configuration.PassiveGuidanceConfig>(JsonSerializer.Serialize(c.Controller,Json),Json)!;
+        settings.Enabled=enabled;settings.AntennaToWorkingPoint=p.WorkingBarM;settings.AntennaHeight=2;
+        double activeLimit=AgOpenWeb.Services.Passive.CPassiveCurve.Limit(settings.StraightLimit,settings.CurveLimit,c.Shape=="straight"?0:1/Math.Abs(c.RadiusM));
+        double boundLimit=Math.Max(settings.StraightLimit,settings.CurveLimit);
         var service=new TrackGuidanceService();TrackGuidanceState? prior=null;var history=new List<DraftPose>();var samples=new List<DraftSample>();bool safe=true;string problem="";
         ImplementGpsFix? fix=null;double measuredE=0,measuredN=0,fixNext=0,distance=0;
         DraftPose Delayed(double time){int i=Math.Clamp((int)Math.Floor(time/physicsDt),0,history.Count-1);return history[i];}
@@ -164,7 +170,7 @@ public static class DraftSuite
                 Passive=new(){Settings=settings,Now=now,Requested=true,Fix=fix,HasLocalPlane=true,ToolEast=measuredE,ToolNorth=measuredN,Context="draft-bench",Trailing=true,Hitch=p.HitchM,Drawbar=p.DrawbarM*c.ProfileDrawbarScale,WorkingBar=p.WorkingBarM,Width=p.WidthM}};
             var result=service.CalculateGuidance(input);prior=result.State;
             double error=Error(c,points,truePose.ToolE,truePose.ToolN);
-            if(!new[]{plant.E,plant.N,plant.Beta,plant.BetaRate,error,result.SteerAngle,result.Passive.Offset,plant.SoilForceN}.All(double.IsFinite)||Math.Abs(result.Passive.Offset)>c.OffsetLimitM+1e-8||Math.Abs(result.SteerAngle)>35.00001||plant.Saturation>1.00001||plant.MaxConstraintError>1e-8||Math.Abs(Math.Atan2(Math.Sin(plant.Beta-plant.H),Math.Cos(plant.Beta-plant.H)))>70*Math.PI/180)
+            if(!new[]{plant.E,plant.N,plant.Beta,plant.BetaRate,error,result.SteerAngle,result.Passive.Offset,plant.SoilForceN}.All(double.IsFinite)||Math.Abs(result.Passive.Offset)>boundLimit+1e-8||Math.Abs(result.SteerAngle)>35.00001||plant.Saturation>1.00001||plant.MaxConstraintError>1e-8||Math.Abs(Math.Atan2(Math.Sin(plant.Beta-plant.H),Math.Cos(plant.Beta-plant.H)))>70*Math.PI/180)
             {safe=false;problem="Non-finite/bounds/constraint violation at "+t.ToString("F1",CultureInfo.InvariantCulture)+" s";break;}
             if(enabled&&outage&&t>91.6&&(result.Passive.Engaged||result.Passive.Offset!=0)){safe=false;problem="Stale implement GPS did not disengage";break;}
             samples.Add(new(t,plant.E,plant.N,plant.H,plant.Beta,truePose.ToolE,truePose.ToolN,error,result.Passive.Offset,result.SteerAngle,
@@ -181,7 +187,7 @@ public static class DraftSuite
         int crossings=0,side=0;foreach(var point in eval)if(Math.Abs(point.Error)>.05){int next=Math.Sign(point.Error);if(side!=0&&side!=next)crossings++;side=next;}
         return new(c.Name,seed,enabled,c,safe,problem,errors.Length>0?Math.Sqrt(errors.Average(x=>x*x)):999,
             errors.Length>0?errors[(int)Math.Floor(.95*(errors.Length-1))]:999,errors.Length>0?errors[^1]:999,mean,sd,eval.Length>0?crossings*60.0/(eval.Length*.1):0,
-            eval.Length>0?100.0*eval.Count(x=>Math.Abs(x.Offset)>=c.OffsetLimitM-.01)/eval.Length:0,
+            eval.Length>0?100.0*eval.Count(x=>Math.Abs(x.Offset)>=activeLimit-.01)/eval.Length:0,
             eval.Length>0?100.0*eval.Count(x=>x.GripUsage>.95)/eval.Length:0,eval.Length>0?100.0*eval.Count(x=>x.Engaged)/eval.Length:0,samples);
     }
     private static List<Check> ModelChecks()

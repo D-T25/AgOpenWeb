@@ -9,7 +9,8 @@ public record DraftSensors(double PositionSigmaM=.015,double ImplementHz=5,doubl
     double TractorDelayS=.10,double HeadingSigmaDegrees=.15,string Heading="dual",bool Dropout=false,double RollSigmaDegrees=.1,double SlowBiasM=.01,double ImuDriftDegPerSec=.003);
 public record DraftCase(string Name,string Shape="straight",double RadiusM=40,string Terrain="uniform",
     DraftPlantParameters? Plant=null,DraftSensors? Sensors=null,double SpeedKph=7.2,double OffsetLimitM=2,
-    bool Stress=false,bool Geometry=true,double ProfileDrawbarScale=1,double IntervalS=4);
+    bool Stress=false,bool Geometry=true,double ProfileDrawbarScale=1,double IntervalS=4,
+    AgOpenWeb.Models.Configuration.PassiveGuidanceConfig? Controller=null,double InitialErrorM=0);
 public record DraftEnvironment(double SlopeDegrees,double GripFactor,double DraftFactor,double AsymmetryFactor);
 public record DraftPose(double T,double E,double N,double H,double Beta,double ToolE,double ToolN,
     double ToolVE,double ToolVN,double Speed,double RollDegrees,double HitchE,double HitchN);
@@ -38,8 +39,10 @@ public sealed class DraftPlant
         double patch=.5+.5*Math.Tanh(5*Math.Sin(distance/18));
         if(c.Terrain=="reversal")slope*=1-2*Math.Clamp((t-65)/8,0,1);
         if(c.Terrain=="rolling")slope*=Math.Sin(distance/40);
+        double draftPattern=c.Terrain=="draft-reversal"?1-2*Math.Clamp((t-65)/8,0,1)
+            :c.Terrain=="draft-patches"?Math.Sin(distance/18):c.Terrain=="patches"?1+.8*patch:1;
         return new(slope*ramp,c.Terrain=="patches"?1-.45*patch:1,
-            c.Terrain=="patches"?1+.6*patch:1,ramp*(c.Terrain=="patches"?1+.8*patch:1));
+            c.Terrain=="patches"?1+.6*patch:1,ramp*draftPattern);
     }
     public void Step(double dt,double demandedSteerDegrees,double targetSpeed,DraftEnvironment env)
     {
