@@ -1,0 +1,1 @@
+{"name":"agopenweb-passive-bench","private":true,"version":"1.0.0","description":"Local-only passive guidance UI integration harness","devDependencies":{"playwright":"1.62.1"}}
